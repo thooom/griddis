@@ -102,6 +102,12 @@ export class Dashboard {
     return Array.from(this.widgetTemplates.values()).map((template) => ({ ...template }));
   }
 
+  getValidSizesForType(type: string): { w: number; h: number }[] {
+    return Array.from(this.widgetTemplates.values())
+      .filter((template) => template.type === type)
+      .map(({ w, h }) => ({ w, h }));
+  }
+
   addWidgetFromTemplate(templateId: string, options: AddWidgetFromTemplateOptions = {}): DashboardWidget {
     const template = this.widgetTemplates.get(templateId);
     if (!template) {

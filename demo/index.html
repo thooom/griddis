@@ -14,6 +14,7 @@
           <p>Recreates the ANTP-like visual style while exercising real package APIs.</p>
         </div>
         <div class="toolbar">
+          <button id="edit-mode" class="btn primary">Edit mode: off</button>
           <button id="open-panel" class="btn primary">+ Add widget</button>
           <button id="save" class="btn">Save layout</button>
           <button id="restore" class="btn">Restore layout</button>
@@ -28,10 +29,7 @@
       <section class="widget-controls">
         <strong>Selected widget:</strong>
         <span id="selected">none</span>
-        <span class="hint">Drag any tile to move it</span>
-        <button id="grow" class="btn">Grow</button>
-        <button id="shrink" class="btn">Shrink</button>
-        <button id="remove" class="btn ghost">Remove</button>
+        <span class="hint">Read-only until edit mode is enabled</span>
       </section>
 
       <div class="classic-link">- Back to ANTP classic</div>

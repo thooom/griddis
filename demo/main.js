@@ -6,34 +6,71 @@ const widgetListEl = document.querySelector('#widget-list');
 const selectedEl = document.querySelector('#selected');
 const toastEl = document.querySelector('#toast');
 
+const editModeBtn = document.querySelector('#edit-mode');
 const openPanelBtn = document.querySelector('#open-panel');
 const closePanelBtn = document.querySelector('#close-panel');
 const saveBtn = document.querySelector('#save');
 const restoreBtn = document.querySelector('#restore');
 const resetBtn = document.querySelector('#reset');
-const growBtn = document.querySelector('#grow');
-const shrinkBtn = document.querySelector('#shrink');
-const removeBtn = document.querySelector('#remove');
 
 const projectWidgetTemplates = [
-  { id: 'kpi-1x1', type: 'kpi', label: 'KPI 1x1', w: 1, h: 1 },
-  { id: 'kpi-1x2', type: 'kpi', label: 'KPI 1x2', w: 1, h: 2 },
-  { id: 'kpi-1x3', type: 'kpi', label: 'KPI 1x3', w: 1, h: 3 },
-  { id: 'graph-2x2', type: 'graph', label: 'Graph 2x2', w: 2, h: 2 },
-  { id: 'graph-2x3', type: 'graph', label: 'Graph 2x3', w: 2, h: 3 },
-  { id: 'list-4x2', type: 'list', label: 'List 4x2', w: 4, h: 2 },
-  { id: 'hero-4x6', type: 'hero', label: 'Hero 4x6', w: 4, h: 6 }
+  { id: 'kpi-1x1', type: 'kpi', label: 'KPI 1×1', w: 1, h: 1 },
+  { id: 'kpi-1x2', type: 'kpi', label: 'KPI 1×2', w: 1, h: 2 },
+  { id: 'kpi-1x3', type: 'kpi', label: 'KPI 1×3', w: 1, h: 3 },
+  { id: 'kpi-2x1', type: 'kpi', label: 'KPI 2×1', w: 2, h: 1 },
+  { id: 'kpi-2x2', type: 'kpi', label: 'KPI 2×2', w: 2, h: 2 },
+  { id: 'kpi-3x1', type: 'kpi', label: 'KPI 3×1', w: 3, h: 1 },
+  { id: 'graph-2x2', type: 'graph', label: 'Graph 2×2', w: 2, h: 2 },
+  { id: 'graph-2x3', type: 'graph', label: 'Graph 2×3', w: 2, h: 3 },
+  { id: 'graph-3x2', type: 'graph', label: 'Graph 3×2', w: 3, h: 2 },
+  { id: 'graph-3x3', type: 'graph', label: 'Graph 3×3', w: 3, h: 3 },
+  { id: 'list-4x2', type: 'list', label: 'List 4×2', w: 4, h: 2 },
+  { id: 'list-4x3', type: 'list', label: 'List 4×3', w: 4, h: 3 },
+  { id: 'hero-4x6', type: 'hero', label: 'Hero 4×6', w: 4, h: 6 }
 ];
 
 const dashboard = new Dashboard({ columns: 12, rows: 10, widgetTemplates: projectWidgetTemplates });
 let selectedId = null;
 let dragState = null;
+let resizeState = null;
+let editMode = false;
 
 function notify(message) {
   if (!toastEl) return;
   toastEl.textContent = message;
   toastEl.classList.add('visible');
   setTimeout(() => toastEl.classList.remove('visible'), 1100);
+}
+
+function updateEditModeUI() {
+  if (editModeBtn) {
+    editModeBtn.textContent = editMode ? 'Edit mode: on' : 'Edit mode: off';
+  }
+
+  if (openPanelBtn) {
+    openPanelBtn.disabled = !editMode;
+  }
+
+  if (resetBtn) {
+    resetBtn.disabled = !editMode;
+  }
+
+  if (!editMode) {
+    panelEl?.classList.add('hidden');
+    if (dragState) {
+      dragState.previewEl?.remove();
+      dragState.sourceEl?.classList.remove('dragging');
+      dragState = null;
+    }
+    if (resizeState) {
+      resizeState.previewEl?.remove();
+      resizeState.sourceEl?.classList.remove('dragging');
+      resizeState = null;
+    }
+    document.body.classList.remove('is-dragging', 'is-resizing');
+  }
+
+  renderBoard();
 }
 
 function setSelected(id, options = {}) {
@@ -53,6 +90,143 @@ function getWidgetById(id) {
 
 function getTemplateById(id) {
   return dashboard.getWidgetTemplates().find((template) => template.id === id) ?? null;
+}
+
+function nearestValid(value, sorted) {
+  if (!sorted.length) return null;
+  return sorted.reduce((prev, curr) =>
+    Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev
+  );
+}
+
+function startResize(cardEl, event, direction) {
+  if (!editMode) return;
+
+  const id = cardEl.getAttribute('data-id');
+  if (!id) return;
+
+  const widget = getWidgetById(id);
+  if (!widget) return;
+
+  event.stopPropagation();
+  event.preventDefault();
+
+  const validSizes = dashboard.getValidSizesForType(widget.type);
+  const metrics = getBoardMetrics();
+  const size = widgetPixelSize(widget, metrics);
+  const boardLeft = metrics.boardRect.left + widget.x * (metrics.columnWidth + metrics.gap);
+  const boardTop = metrics.boardRect.top + widget.y * (metrics.rowHeight + metrics.gap);
+
+  const previewEl = document.createElement('div');
+  previewEl.classList.add('resize-preview');
+  previewEl.style.left = `${boardLeft}px`;
+  previewEl.style.top = `${boardTop}px`;
+  previewEl.style.width = `${size.width}px`;
+  previewEl.style.height = `${size.height}px`;
+  document.body.appendChild(previewEl);
+
+  cardEl.classList.add('dragging');
+  document.body.classList.add('is-resizing');
+
+  resizeState = {
+    id,
+    widget,
+    direction,
+    sourceEl: cardEl,
+    previewEl,
+    pointerId: event.pointerId,
+    currentW: widget.w,
+    currentH: widget.h,
+    currentX: widget.x,
+    currentY: widget.y,
+    validSizes,
+    metrics,
+    boardLeft,
+    boardTop,
+    originalRight: widget.x + widget.w,
+    originalBottom: widget.y + widget.h
+  };
+
+  cardEl.setPointerCapture(event.pointerId);
+}
+
+function updateResizePreview(clientX, clientY) {
+  if (!resizeState) return;
+
+  const { widget, direction, validSizes, metrics, boardLeft, boardTop, originalRight, originalBottom } = resizeState;
+
+  let newW = widget.w;
+  let newH = widget.h;
+  let newX = widget.x;
+  let newY = widget.y;
+
+  if (direction === 'e') {
+    // Right edge: left position fixed, width grows toward cursor
+    const rawW = Math.max(1, Math.round((clientX - boardLeft + metrics.gap / 2) / (metrics.columnWidth + metrics.gap)));
+    const validWidths = validSizes.filter((s) => s.h === widget.h).map((s) => s.w);
+    newW = nearestValid(rawW, validWidths) ?? widget.w;
+  }
+
+  if (direction === 's') {
+    // Bottom edge: top position fixed, height grows toward cursor
+    const rawH = Math.max(1, Math.round((clientY - boardTop + metrics.gap / 2) / (metrics.rowHeight + metrics.gap)));
+    const validHeights = validSizes.filter((s) => s.w === widget.w).map((s) => s.h);
+    newH = nearestValid(rawH, validHeights) ?? widget.h;
+  }
+
+  if (direction === 'w') {
+    // Left edge: right boundary fixed, width grows toward cursor (x shifts left)
+    const rawX = Math.round((clientX - metrics.boardRect.left) / (metrics.columnWidth + metrics.gap));
+    const rawW = Math.max(1, originalRight - rawX);
+    const validWidths = validSizes.filter((s) => s.h === widget.h).map((s) => s.w);
+    newW = nearestValid(rawW, validWidths) ?? widget.w;
+    newX = Math.max(0, originalRight - newW);
+  }
+
+  if (direction === 'n') {
+    // Top edge: bottom boundary fixed, height grows toward cursor (y shifts up)
+    const rawY = Math.round((clientY - metrics.boardRect.top) / (metrics.rowHeight + metrics.gap));
+    const rawH = Math.max(1, originalBottom - rawY);
+    const validHeights = validSizes.filter((s) => s.w === widget.w).map((s) => s.h);
+    newH = nearestValid(rawH, validHeights) ?? widget.h;
+    newY = Math.max(0, originalBottom - newH);
+  }
+
+  resizeState.currentW = newW;
+  resizeState.currentH = newH;
+  resizeState.currentX = newX;
+  resizeState.currentY = newY;
+
+  const previewWidth = newW * metrics.columnWidth + Math.max(0, newW - 1) * metrics.gap;
+  const previewHeight = newH * metrics.rowHeight + Math.max(0, newH - 1) * metrics.gap;
+  const previewLeft = metrics.boardRect.left + newX * (metrics.columnWidth + metrics.gap);
+  const previewTop = metrics.boardRect.top + newY * (metrics.rowHeight + metrics.gap);
+  resizeState.previewEl.style.left = `${previewLeft}px`;
+  resizeState.previewEl.style.top = `${previewTop}px`;
+  resizeState.previewEl.style.width = `${previewWidth}px`;
+  resizeState.previewEl.style.height = `${previewHeight}px`;
+}
+
+function endResize() {
+  if (!resizeState) return;
+
+  resizeState.previewEl.remove();
+  resizeState.sourceEl.classList.remove('dragging');
+  document.body.classList.remove('is-resizing');
+
+  const { id, widget, currentW, currentH, currentX, currentY } = resizeState;
+  resizeState = null;
+
+  const changed = currentW !== widget.w || currentH !== widget.h || currentX !== widget.x || currentY !== widget.y;
+  if (changed) {
+    try {
+      dashboard.updateWidget({ ...widget, x: currentX, y: currentY, w: currentW, h: currentH });
+      setSelected(id);
+    } catch {
+      notify('Cannot resize here');
+      renderBoard();
+    }
+  }
 }
 
 function getBoardMetrics() {
@@ -143,6 +317,8 @@ function endDrag() {
 }
 
 function startDrag(cardEl, event) {
+  if (!editMode) return;
+
   const id = cardEl.getAttribute('data-id');
   if (!id) return;
 
@@ -217,8 +393,12 @@ function renderBoard() {
       const style = `grid-column:${widget.x + 1} / span ${widget.w}; grid-row:${widget.y + 1} / span ${widget.h};`;
       const safeTitle = widget.type.toUpperCase();
       return `<article class="widget ${selectedClass}" data-id="${widget.id}" style="${style}" title="${safeTitle}">
-        <button class="remove" data-remove="${widget.id}" aria-label="Remove widget">x</button>
+        ${editMode ? `<button class="remove" data-remove="${widget.id}" aria-label="Remove widget">x</button>` : ''}
         ${widgetMarkup(widget)}
+        ${editMode ? `<div class="resize-handle resize-n" data-resize="${widget.id}" data-dir="n"></div>` : ''}
+        ${editMode ? `<div class="resize-handle resize-e" data-resize="${widget.id}" data-dir="e"></div>` : ''}
+        ${editMode ? `<div class="resize-handle resize-s" data-resize="${widget.id}" data-dir="s"></div>` : ''}
+        ${editMode ? `<div class="resize-handle resize-w" data-resize="${widget.id}" data-dir="w"></div>` : ''}
       </article>`;
     })
     .join('');
@@ -227,13 +407,16 @@ function renderBoard() {
     card.addEventListener('click', (event) => {
       const removeButton = event.target.closest('[data-remove]');
       if (removeButton) return;
+      if (!editMode) return;
       const id = card.getAttribute('data-id');
       if (id) setSelected(id);
     });
 
     card.addEventListener('pointerdown', (event) => {
+      if (!editMode) return;
       const removeButton = event.target.closest('[data-remove]');
-      if (removeButton || event.button !== 0) return;
+      const resizeHandle = event.target.closest('.resize-handle');
+      if (removeButton || resizeHandle || event.button !== 0) return;
       event.preventDefault();
       setSelected(card.getAttribute('data-id'), { render: false });
       startDrag(card, event);
@@ -243,11 +426,26 @@ function renderBoard() {
   for (const removeButton of boardEl.querySelectorAll('[data-remove]')) {
     removeButton.addEventListener('click', (event) => {
       event.stopPropagation();
+      if (!editMode) return;
       const id = removeButton.getAttribute('data-remove');
       if (!id) return;
       dashboard.removeWidget(id);
       if (selectedId === id) setSelected(null);
       notify(`Removed ${id}`);
+    });
+  }
+
+  for (const handle of boardEl.querySelectorAll('.resize-handle')) {
+    handle.addEventListener('pointerdown', (event) => {
+      if (!editMode) return;
+      if (event.button !== 0) return;
+      const id = handle.getAttribute('data-resize');
+      const dir = handle.getAttribute('data-dir');
+      const card = id ? boardEl.querySelector(`[data-id="${id}"]`) : null;
+      if (card && dir) {
+        setSelected(id, { render: false });
+        startResize(card, event, dir);
+      }
     });
   }
 }
@@ -266,6 +464,10 @@ function renderWidgetList() {
 
   for (const button of widgetListEl.querySelectorAll('[data-add]')) {
     button.addEventListener('click', () => {
+      if (!editMode) {
+        notify('Enable edit mode to add widgets');
+        return;
+      }
       const templateId = button.getAttribute('data-add');
       if (!templateId) return;
       addWidget(templateId);
@@ -275,6 +477,8 @@ function renderWidgetList() {
 }
 
 function addWidget(templateId) {
+  if (!editMode) return;
+
   const template = getTemplateById(templateId);
   if (!template) return;
 
@@ -285,19 +489,6 @@ function addWidget(templateId) {
 
   setSelected(added.id);
   notify(`Added ${template.label ?? template.id}`);
-}
-
-function requireSelection() {
-  if (!selectedId) {
-    notify('Select a widget first');
-    return null;
-  }
-  const selected = getWidgetById(selectedId);
-  if (!selected) {
-    setSelected(null);
-    notify('Selected widget no longer exists');
-  }
-  return selected;
 }
 
 function seedLayout() {
@@ -326,11 +517,21 @@ function seedLayout() {
 }
 
 dashboard.on('layoutChanged', () => {
-  if (dragState) return;
+  if (dragState || resizeState) return;
   renderBoard();
 });
 
+editModeBtn?.addEventListener('click', () => {
+  editMode = !editMode;
+  updateEditModeUI();
+  notify(editMode ? 'Edit mode enabled' : 'Read-only mode enabled');
+});
+
 openPanelBtn?.addEventListener('click', () => {
+  if (!editMode) {
+    notify('Enable edit mode to add widgets');
+    return;
+  }
   panelEl?.classList.remove('hidden');
 });
 
@@ -349,27 +550,12 @@ restoreBtn?.addEventListener('click', async () => {
 });
 
 resetBtn?.addEventListener('click', () => {
+  if (!editMode) {
+    notify('Enable edit mode to reset the board');
+    return;
+  }
   seedLayout();
   notify('Board reset');
-});
-
-growBtn?.addEventListener('click', () => {
-  const selected = requireSelection();
-  if (!selected) return;
-  dashboard.resizeWidget(selected.id, selected.w + 1, selected.h + 1);
-});
-
-shrinkBtn?.addEventListener('click', () => {
-  const selected = requireSelection();
-  if (!selected) return;
-  dashboard.resizeWidget(selected.id, selected.w - 1, selected.h - 1);
-});
-
-removeBtn?.addEventListener('click', () => {
-  const selected = requireSelection();
-  if (!selected) return;
-  dashboard.removeWidget(selected.id);
-  setSelected(dashboard.getWidgets()[0]?.id ?? null);
 });
 
 document.addEventListener('keydown', (event) => {
@@ -379,24 +565,38 @@ document.addEventListener('keydown', (event) => {
 });
 
 document.addEventListener('pointermove', (event) => {
-  if (!dragState || event.pointerId !== dragState.pointerId) return;
-  event.preventDefault();
-  updateDragPreview(event.clientX, event.clientY);
+  if (dragState && event.pointerId === dragState.pointerId) {
+    event.preventDefault();
+    updateDragPreview(event.clientX, event.clientY);
+  } else if (resizeState && event.pointerId === resizeState.pointerId) {
+    event.preventDefault();
+    updateResizePreview(event.clientX, event.clientY);
+  }
 }, true);
 
 document.addEventListener('pointerup', (event) => {
-  if (!dragState || event.pointerId !== dragState.pointerId) return;
-  endDrag();
+  if (dragState && event.pointerId === dragState.pointerId) {
+    endDrag();
+  } else if (resizeState && event.pointerId === resizeState.pointerId) {
+    endResize();
+  }
 }, true);
 
 document.addEventListener('pointercancel', (event) => {
-  if (!dragState || event.pointerId !== dragState.pointerId) return;
-  dragState.previewEl?.remove();
-  dragState.sourceEl?.classList.remove('dragging');
-  document.body.classList.remove('is-dragging');
-  dragState = null;
+  if (dragState && event.pointerId === dragState.pointerId) {
+    dragState.previewEl?.remove();
+    dragState.sourceEl?.classList.remove('dragging');
+    document.body.classList.remove('is-dragging');
+    dragState = null;
+  } else if (resizeState && event.pointerId === resizeState.pointerId) {
+    resizeState.previewEl?.remove();
+    resizeState.sourceEl?.classList.remove('dragging');
+    document.body.classList.remove('is-resizing');
+    resizeState = null;
+  }
 }, true);
 
 renderWidgetList();
 seedLayout();
+updateEditModeUI();
 notify('Demo ready');

@@ -73,6 +73,16 @@ h1 {
   transform: translateY(-1px);
 }
 
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn:disabled:hover {
+  transform: none;
+}
+
 .btn.primary {
   color: #fff;
   border-color: #4c5fff;
@@ -119,6 +129,68 @@ h1 {
 
 .widget.dragging {
   opacity: 0.12;
+}
+
+.resize-handle {
+  position: absolute;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.widget:hover .resize-handle,
+.widget.selected .resize-handle {
+  opacity: 1;
+}
+
+.resize-n {
+  top: 0;
+  left: 10px;
+  right: 10px;
+  height: 10px;
+  cursor: ns-resize;
+  background: linear-gradient(0deg, transparent 0%, rgba(110, 115, 255, 0.18) 100%);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.resize-e {
+  top: 10px;
+  right: 0;
+  bottom: 10px;
+  width: 10px;
+  cursor: ew-resize;
+  background: linear-gradient(90deg, transparent 0%, rgba(110, 115, 255, 0.18) 100%);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.resize-s {
+  bottom: 0;
+  left: 10px;
+  right: 10px;
+  height: 10px;
+  cursor: ns-resize;
+  background: linear-gradient(180deg, transparent 0%, rgba(110, 115, 255, 0.18) 100%);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.resize-w {
+  top: 10px;
+  left: 0;
+  bottom: 10px;
+  width: 10px;
+  cursor: ew-resize;
+  background: linear-gradient(270deg, transparent 0%, rgba(110, 115, 255, 0.18) 100%);
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.resize-preview {
+  position: fixed;
+  z-index: 998;
+  pointer-events: none;
+  border-radius: var(--radius);
+  border: 2px dashed #6f74ff;
+  background: rgba(111, 116, 255, 0.08);
+  transition: width 60ms ease, height 60ms ease;
 }
 
 .widget.drag-preview {
@@ -268,6 +340,10 @@ h1 {
 
 body.is-dragging {
   cursor: grabbing;
+}
+
+body.is-resizing {
+  user-select: none;
 }
 
 .classic-link {
