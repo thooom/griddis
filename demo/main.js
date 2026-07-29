@@ -15,16 +15,17 @@ const growBtn = document.querySelector('#grow');
 const shrinkBtn = document.querySelector('#shrink');
 const removeBtn = document.querySelector('#remove');
 
-const widgetTemplates = [
-  { type: 'orb', label: 'Aura', w: 2, h: 2 },
-  { type: 'clock', label: 'Clock', w: 3, h: 2 },
-  { type: 'date', label: 'Date', w: 2, h: 2 },
-  { type: 'dice', label: 'Dice', w: 2, h: 2 },
-  { type: 'tarot', label: 'Tarot', w: 4, h: 6 }
+const projectWidgetTemplates = [
+  { id: 'kpi-1x1', type: 'kpi', label: 'KPI 1x1', w: 1, h: 1 },
+  { id: 'kpi-1x2', type: 'kpi', label: 'KPI 1x2', w: 1, h: 2 },
+  { id: 'kpi-1x3', type: 'kpi', label: 'KPI 1x3', w: 1, h: 3 },
+  { id: 'graph-2x2', type: 'graph', label: 'Graph 2x2', w: 2, h: 2 },
+  { id: 'graph-2x3', type: 'graph', label: 'Graph 2x3', w: 2, h: 3 },
+  { id: 'list-4x2', type: 'list', label: 'List 4x2', w: 4, h: 2 },
+  { id: 'hero-4x6', type: 'hero', label: 'Hero 4x6', w: 4, h: 6 }
 ];
 
-const dashboard = new Dashboard({ columns: 12 });
-let widgetIndex = 1;
+const dashboard = new Dashboard({ columns: 12, rows: 10, widgetTemplates: projectWidgetTemplates });
 let selectedId = null;
 let dragState = null;
 
@@ -48,6 +49,10 @@ function setSelected(id, options = {}) {
 
 function getWidgetById(id) {
   return dashboard.getWidgets().find((widget) => widget.id === id) ?? null;
+}
+
+function getTemplateById(id) {
+  return dashboard.getWidgetTemplates().find((template) => template.id === id) ?? null;
 }
 
 function getBoardMetrics() {
@@ -171,16 +176,12 @@ function startDrag(cardEl, event) {
   cardEl.setPointerCapture(event.pointerId);
 }
 
-function getTemplate(type) {
-  return widgetTemplates.find((template) => template.type === type) ?? widgetTemplates[0];
-}
-
 function widgetMarkup(widget) {
-  if (widget.type === 'orb') {
+  if (widget.type === 'kpi') {
     return '<div class="widget-orb"><div class="orb"></div><div class="hold">HOLD</div></div>';
   }
 
-  if (widget.type === 'clock') {
+  if (widget.type === 'graph') {
     const now = new Date();
     const hh = String(now.getHours()).padStart(2, '0');
     const mm = String(now.getMinutes()).padStart(2, '0');
@@ -188,18 +189,18 @@ function widgetMarkup(widget) {
     return `<div class="widget-clock"><div class="clock">${hh}:${mm} <small>${period}</small></div></div>`;
   }
 
-  if (widget.type === 'date') {
+  if (widget.type === 'list') {
     const now = new Date();
     const weekday = now.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase();
     const month = now.toLocaleDateString(undefined, { month: 'short' }).toUpperCase();
     return `<div class="widget-date"><div class="weekday">${weekday}</div><div class="day">${now.getDate()}</div><div class="month">${month}</div></div>`;
   }
 
-  if (widget.type === 'dice') {
+  if (widget.type === 'clock') {
     return '<div class="widget-dice"><div class="dice-grid"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div></div>';
   }
 
-  if (widget.type === 'tarot') {
+  if (widget.type === 'hero') {
     return '<div class="widget-tarot"><div class="tarot-card"><div class="tarot-body">✶</div><div class="tarot-title">PAGE OF CUPS</div></div></div>';
   }
 
@@ -254,39 +255,36 @@ function renderBoard() {
 function renderWidgetList() {
   if (!widgetListEl) return;
 
-  widgetListEl.innerHTML = widgetTemplates
+  const templates = dashboard.getWidgetTemplates();
+
+  widgetListEl.innerHTML = templates
     .map(
       (template) =>
-        `<button class="widget-row" data-add="${template.type}"><span>${template.label}</span><span class="widget-size">${template.w}x${template.h}</span></button>`
+        `<button class="widget-row" data-add="${template.id}"><span>${template.label ?? template.id}</span><span class="widget-size">${template.w}x${template.h}</span></button>`
     )
     .join('');
 
   for (const button of widgetListEl.querySelectorAll('[data-add]')) {
     button.addEventListener('click', () => {
-      const type = button.getAttribute('data-add');
-      if (!type) return;
-      addWidget(type);
+      const templateId = button.getAttribute('data-add');
+      if (!templateId) return;
+      addWidget(templateId);
       panelEl?.classList.add('hidden');
     });
   }
 }
 
-function addWidget(type) {
-  const template = getTemplate(type);
-  const id = `${type}-${widgetIndex++}`;
+function addWidget(templateId) {
+  const template = getTemplateById(templateId);
+  if (!template) return;
 
-  const added = dashboard.addWidget({
-    id,
-    type,
+  const added = dashboard.addWidgetFromTemplate(templateId, {
     x: 0,
-    y: 0,
-    w: template.w,
-    h: template.h,
-    data: { label: template.label }
+    y: 0
   });
 
   setSelected(added.id);
-  notify(`Added ${template.label}`);
+  notify(`Added ${template.label ?? template.id}`);
 }
 
 function requireSelection() {
@@ -309,23 +307,17 @@ function seedLayout() {
   }
 
   const initial = [
-    { type: 'orb', x: 0, y: 0 },
-    { type: 'clock', x: 0, y: 2 },
-    { type: 'date', x: 4, y: 0 },
-    { type: 'dice', x: 6, y: 0 },
-    { type: 'tarot', x: 8, y: 0 }
+    { templateId: 'kpi-1x2', x: 0, y: 0 },
+    { templateId: 'graph-2x2', x: 0, y: 2 },
+    { templateId: 'list-4x2', x: 4, y: 0 },
+    { templateId: 'kpi-1x1', x: 9, y: 0 },
+    { templateId: 'hero-4x6', x: 8, y: 2 }
   ];
 
   for (const item of initial) {
-    const template = getTemplate(item.type);
-    dashboard.addWidget({
-      id: `${item.type}-${widgetIndex++}`,
-      type: item.type,
+    dashboard.addWidgetFromTemplate(item.templateId, {
       x: item.x,
-      y: item.y,
-      w: template.w,
-      h: template.h,
-      data: { label: template.label }
+      y: item.y
     });
   }
 

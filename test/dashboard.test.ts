@@ -41,4 +41,41 @@ describe('Dashboard', () => {
 
     expect(callCount).toBe(4);
   });
+
+  it('supports adding widgets from registered templates', () => {
+    const dashboard = new Dashboard({
+      columns: 8,
+      widgetTemplates: [
+        { id: 'kpi-1x1', type: 'kpi', w: 1, h: 1 },
+        { id: 'graph-2x2', type: 'graph', w: 2, h: 2 }
+      ]
+    });
+
+    const widget = dashboard.addWidgetFromTemplate('graph-2x2', { id: 'g1', x: 2, y: 0 });
+
+    expect(widget.id).toBe('g1');
+    expect(widget.type).toBe('graph');
+    expect(widget.w).toBe(2);
+    expect(widget.h).toBe(2);
+    expect(widget.data).toBeUndefined();
+  });
+
+  it('rejects unknown templates', () => {
+    const dashboard = new Dashboard();
+
+    expect(() => dashboard.addWidgetFromTemplate('does-not-exist')).toThrow(
+      'Widget template "does-not-exist" is not registered'
+    );
+  });
+
+  it('respects configured row bounds', () => {
+    const dashboard = new Dashboard({ columns: 4, rows: 2 });
+
+    dashboard.addWidget({ id: 'a', type: 'kpi', x: 0, y: 0, w: 4, h: 1 });
+    dashboard.addWidget({ id: 'b', type: 'kpi', x: 0, y: 1, w: 4, h: 1 });
+
+    expect(() => dashboard.addWidget({ id: 'c', type: 'kpi', x: 0, y: 0, w: 4, h: 1 })).toThrow(
+      'Unable to place widget within configured row bounds'
+    );
+  });
 });

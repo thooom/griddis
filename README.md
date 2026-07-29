@@ -11,7 +11,8 @@ This repository includes a tactile, ANTP-inspired demo board (wood background, f
 - Widget resizing API
 - Snap-to-grid positioning
 - Collision detection and resolution
-- Configurable column count
+- Configurable grid dimensions (columns and optional row bounds)
+- Template-based widget catalog controlled by the consuming project
 - Save and restore layouts as JSON
 - Event system for widget and layout updates
 - Plugin architecture for custom widget behavior
@@ -28,7 +29,15 @@ npm install griddis
 ```ts
 import { Dashboard } from 'griddis';
 
-const dashboard = new Dashboard({ columns: 12 });
+const dashboard = new Dashboard({
+  columns: 12,
+  rows: 10,
+  widgetTemplates: [
+    { id: 'kpi-1x1', type: 'kpi', w: 1, h: 1, label: 'KPI 1x1' },
+    { id: 'graph-2x2', type: 'graph', w: 2, h: 2, label: 'Graph 2x2' },
+    { id: 'list-4x2', type: 'list', w: 4, h: 2, label: 'List 4x2' }
+  ]
+});
 
 dashboard.registerPlugin('chart', (widget) => ({
   ...widget,
@@ -39,15 +48,17 @@ dashboard.on('layoutChanged', (layout) => {
   console.log('Layout updated', layout);
 });
 
-dashboard.addWidget({
+// Adds an empty widget with size taken from the registered template.
+dashboard.addWidgetFromTemplate('graph-2x2', {
   id: 'widget-1',
-  type: 'chart',
   x: 0,
-  y: 0,
-  w: 4,
-  h: 3
+  y: 0
 });
 ```
+
+The consuming project decides which templates exist and what each size/type means.
+For example: 1x1, 1x2, and 1x3 as KPI tiles; 2x2 and 2x3 as graphs; 4x2 as lists.
+The package only enforces layout behavior and sizing.
 
 ## Widget Model
 
@@ -64,6 +75,19 @@ interface DashboardWidget {
   maxW?: number;
   maxH?: number;
   data?: unknown;
+}
+
+interface WidgetTemplate {
+  id: string;
+  type: string;
+  w: number;
+  h: number;
+  label?: string;
+}
+
+interface DashboardDimensions {
+  columns: number;
+  rows?: number;
 }
 ```
 

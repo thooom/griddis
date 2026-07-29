@@ -12,6 +12,31 @@ export interface DashboardWidget {
   data?: unknown;
 }
 
+export interface DashboardDimensions {
+  columns: number;
+  rows?: number;
+}
+
+export interface WidgetTemplate {
+  id: string;
+  type: string;
+  w: number;
+  h: number;
+  minW?: number;
+  minH?: number;
+  maxW?: number;
+  maxH?: number;
+  label?: string;
+}
+
+export interface AddWidgetFromTemplateOptions {
+  id?: string;
+  x?: number;
+  y?: number;
+  type?: string;
+  data?: unknown;
+}
+
 export type DashboardEvents = {
   widgetAdded: DashboardWidget;
   widgetUpdated: DashboardWidget;

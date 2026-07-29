@@ -1,12 +1,15 @@
 export { Dashboard } from './core/Dashboard';
 export { Layout } from './core/Layout';
-export type { DashboardWidget, DashboardEvents } from './types';
 export { EventBus } from './events/EventBus';
-export { GridEngine } from './grid/GridEngine';
 export { CollisionEngine } from './grid/CollisionEngine';
 export { DragManager } from './grid/DragManager';
+export { GridEngine } from './grid/GridEngine';
 export { ResizeManager } from './grid/ResizeManager';
-export type { StorageAdapter } from './storage/StorageAdapter';
-export { MemoryStorage } from './storage/MemoryStorage';
 export { PluginManager } from './plugins/PluginManager';
 export type { DashboardPlugin } from './plugins/PluginManager';
+export { MemoryStorage } from './storage/MemoryStorage';
+export type { StorageAdapter } from './storage/StorageAdapter';
+export type {
+    AddWidgetFromTemplateOptions, DashboardDimensions, DashboardEvents, DashboardWidget, WidgetTemplate
+} from './types';
+
