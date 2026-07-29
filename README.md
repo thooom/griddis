@@ -2,6 +2,8 @@
 
 A modern, framework-agnostic TypeScript dashboard widget system with draggable and resizable grid widgets.
 
+This repository includes a tactile, ANTP-inspired demo board (wood background, floating cards, add-widget panel) so the package and its intended UX direction are visible together. Widgets are moved with drag and drop rather than directional move buttons.
+
 ## Features
 
 - Grid-based layout engine
@@ -98,6 +100,31 @@ npm run lint
 npm test
 npm run build
 ```
+
+## Demo App
+
+A local consumer app lives in `demo/` so you can test the package as an npm dependency during development.
+
+The demo is intentionally styled to resemble a tactile browser start-page dashboard and exercises package APIs through UI actions:
+
+- Add and remove widgets
+- Drag and resize selected widgets
+- Save and restore layout
+- Reset to a seeded reference layout
+
+```bash
+npm run build
+npm run demo:install
+npm run demo:dev
+```
+
+For a production-style check of the demo consumer:
+
+```bash
+npm run demo:build
+```
+
+If this build succeeds, your package exports and runtime integration are valid in a real app context.
 
 ## License
 

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Griddis Demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="scene">
+      <header class="topbar">
+        <div>
+          <h1>griddis tactile board demo</h1>
+          <p>Recreates the ANTP-like visual style while exercising real package APIs.</p>
+        </div>
+        <div class="toolbar">
+          <button id="open-panel" class="btn primary">+ Add widget</button>
+          <button id="save" class="btn">Save layout</button>
+          <button id="restore" class="btn">Restore layout</button>
+          <button id="reset" class="btn ghost">Reset board</button>
+        </div>
+      </header>
+
+      <section class="board-shell">
+        <div id="board" class="board" aria-label="Widget board"></div>
+      </section>
+
+      <section class="widget-controls">
+        <strong>Selected widget:</strong>
+        <span id="selected">none</span>
+        <span class="hint">Drag any tile to move it</span>
+        <button id="grow" class="btn">Grow</button>
+        <button id="shrink" class="btn">Shrink</button>
+        <button id="remove" class="btn ghost">Remove</button>
+      </section>
+
+      <div class="classic-link">- Back to ANTP classic</div>
+    </main>
+
+    <aside id="panel" class="panel hidden" aria-label="Add widget panel">
+      <div class="panel-card">
+        <div class="panel-header">
+          <h2>Add to your board</h2>
+          <button id="close-panel" class="close">x</button>
+        </div>
+        <p>Shortcuts open sites; widgets are live tiles.</p>
+        <div class="shortcut-row">
+          <button id="new-shortcut" class="shortcut-btn">+ New shortcut</button>
+        </div>
+        <h3>Widgets</h3>
+        <div id="widget-list" class="widget-list"></div>
+      </div>
+    </aside>
+
+    <div id="toast" class="toast"></div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
