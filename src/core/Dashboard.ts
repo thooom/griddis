@@ -7,12 +7,15 @@ import { PluginManager } from '../plugins/PluginManager';
 import { MemoryStorage } from '../storage/MemoryStorage';
 import { StorageAdapter } from '../storage/StorageAdapter';
 import {
-    AddWidgetFromTemplateOptions,
-    DashboardDimensions,
-    DashboardEvents,
-    DashboardWidget,
-    WidgetTemplate
+  AddWidgetFromTemplateOptions,
+  DashboardDimensions,
+  DashboardEvents,
+  DashboardWidget,
+  LayoutScope,
+  ResponsiveBreakpoint,
+  WidgetTemplate
 } from '../types';
+import { resolveResponsiveBreakpoint } from '../utils/responsive';
 import { Layout } from './Layout';
 
 export interface DashboardOptions {
@@ -65,6 +68,26 @@ export class Dashboard {
     this.layout.setAll(relayout);
   }
 
+  private normalizeAndResolveWidgets(widgets: DashboardWidget[]): DashboardWidget[] {
+    const ordered = [...widgets].sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id));
+    const resolvedWidgets: DashboardWidget[] = [];
+
+    for (const widget of ordered) {
+      const normalized = this.gridEngine.normalize(widget);
+      const resolved = this.collisionEngine.resolve(normalized, resolvedWidgets, this.gridEngine.getRows());
+      resolvedWidgets.push(resolved);
+    }
+
+    return resolvedWidgets;
+  }
+
+  private createLayoutStorageKey(scope: LayoutScope): string {
+    const namespace = scope.namespace ?? 'layout';
+    const breakpointKey = scope.breakpointKey ?? 'default';
+    const layoutId = scope.layoutId ?? 'default';
+    return `${namespace}:${scope.appId}:${scope.userId}:${breakpointKey}:${layoutId}`;
+  }
+
   registerPlugin(type: string, initialize?: (widget: DashboardWidget) => DashboardWidget): void {
     this.plugins.register({ type, initialize });
   }
@@ -93,6 +116,12 @@ export class Dashboard {
       columns: this.gridEngine.getColumns(),
       rows: this.gridEngine.getRows()
     };
+  }
+
+  applyResponsiveDimensions(width: number, breakpoints: ResponsiveBreakpoint[]): ResponsiveBreakpoint {
+    const selected = resolveResponsiveBreakpoint(width, breakpoints);
+    this.setDimensions({ columns: selected.columns, rows: selected.rows });
+    return selected;
   }
 
   setWidgetTemplates(templates: WidgetTemplate[]): void {
@@ -205,6 +234,26 @@ export class Dashboard {
     return this.layout.getAll();
   }
 
+  setLayout(widgets: DashboardWidget[]): DashboardWidget[] {
+    const resolved = this.normalizeAndResolveWidgets(widgets);
+    this.layout.setAll(resolved);
+    this.eventBus.emit('layoutChanged', this.layout.getAll());
+    return this.layout.getAll();
+  }
+
+  clearLayout(): void {
+    this.layout.setAll([]);
+    this.eventBus.emit('layoutChanged', this.layout.getAll());
+  }
+
+  applyDefaultLayout(widgets: DashboardWidget[], options: { onlyIfEmpty?: boolean } = {}): DashboardWidget[] {
+    if (options.onlyIfEmpty && this.layout.getAll().length > 0) {
+      return this.layout.getAll();
+    }
+
+    return this.setLayout(widgets);
+  }
+
   on<TKey extends keyof DashboardEvents>(
     event: TKey,
     handler: (payload: DashboardEvents[TKey]) => void
@@ -216,6 +265,12 @@ export class Dashboard {
     await this.storage.save(key, this.layout.toJSON());
   }
 
+  async saveScopedLayout(scope: LayoutScope): Promise<string> {
+    const key = this.createLayoutStorageKey(scope);
+    await this.saveLayout(key);
+    return key;
+  }
+
   async restoreLayout(key: string): Promise<DashboardWidget[]> {
     const saved = await this.storage.load(key);
     if (!saved) return this.layout.getAll();
@@ -224,5 +279,30 @@ export class Dashboard {
     this.relayoutWidgets();
     this.eventBus.emit('layoutChanged', this.layout.getAll());
     return this.layout.getAll();
+  }
+
+  async restoreScopedLayout(scope: LayoutScope): Promise<DashboardWidget[]> {
+    const key = this.createLayoutStorageKey(scope);
+    return this.restoreLayout(key);
+  }
+
+  async hasScopedLayout(scope: LayoutScope): Promise<boolean> {
+    const key = this.createLayoutStorageKey(scope);
+    const saved = await this.storage.load(key);
+    return saved !== null;
+  }
+
+  async restoreScopedLayoutOrDefault(
+    scope: LayoutScope,
+    defaultWidgets: DashboardWidget[]
+  ): Promise<{ source: 'saved' | 'default'; widgets: DashboardWidget[] }> {
+    const hasSaved = await this.hasScopedLayout(scope);
+    if (hasSaved) {
+      const widgets = await this.restoreScopedLayout(scope);
+      return { source: 'saved', widgets };
+    }
+
+    const widgets = this.applyDefaultLayout(defaultWidgets, { onlyIfEmpty: false });
+    return { source: 'default', widgets };
   }
 }

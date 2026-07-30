@@ -37,6 +37,21 @@ export interface AddWidgetFromTemplateOptions {
   data?: unknown;
 }
 
+export interface LayoutScope {
+  appId: string;
+  userId: string;
+  breakpointKey?: string;
+  layoutId?: string;
+  namespace?: string;
+}
+
+export interface ResponsiveBreakpoint {
+  key: string;
+  minWidth: number;
+  columns: number;
+  rows?: number;
+}
+
 export type DashboardEvents = {
   widgetAdded: DashboardWidget;
   widgetUpdated: DashboardWidget;

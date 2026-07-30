@@ -10,6 +10,13 @@ export type { DashboardPlugin } from './plugins/PluginManager';
 export { MemoryStorage } from './storage/MemoryStorage';
 export type { StorageAdapter } from './storage/StorageAdapter';
 export type {
-    AddWidgetFromTemplateOptions, DashboardDimensions, DashboardEvents, DashboardWidget, WidgetTemplate
+    AddWidgetFromTemplateOptions,
+    DashboardDimensions,
+    DashboardEvents,
+    DashboardWidget,
+    LayoutScope,
+    ResponsiveBreakpoint,
+    WidgetTemplate
 } from './types';
+export { resolveResponsiveBreakpoint } from './utils/responsive';
 

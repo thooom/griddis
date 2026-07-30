@@ -105,4 +105,61 @@ describe('Dashboard', () => {
       }
     }
   });
+
+  it('saves and restores scoped personal layout per breakpoint', async () => {
+    const dashboard = new Dashboard({ columns: 9 });
+
+    dashboard.addWidget({ id: 'desktop-kpi', type: 'kpi', x: 0, y: 0, w: 3, h: 1 });
+    await dashboard.saveScopedLayout({ appId: 'sales', userId: 'u1', breakpointKey: 'desktop' });
+
+    dashboard.setColumns(3);
+    dashboard.clearLayout();
+    dashboard.addWidget({ id: 'mobile-kpi', type: 'kpi', x: 0, y: 0, w: 1, h: 1 });
+    await dashboard.saveScopedLayout({ appId: 'sales', userId: 'u1', breakpointKey: 'mobile' });
+
+    await dashboard.restoreScopedLayout({ appId: 'sales', userId: 'u1', breakpointKey: 'desktop' });
+    expect(dashboard.getWidgets().map((w) => w.id)).toEqual(['desktop-kpi']);
+
+    await dashboard.restoreScopedLayout({ appId: 'sales', userId: 'u1', breakpointKey: 'mobile' });
+    expect(dashboard.getWidgets().map((w) => w.id)).toEqual(['mobile-kpi']);
+  });
+
+  it('restores saved scoped layout or applies code-defined default layout', async () => {
+    const dashboard = new Dashboard({ columns: 6 });
+    const defaultWidgets = [{ id: 'default-a', type: 'kpi', x: 0, y: 0, w: 2, h: 1 }];
+
+    const noSaved = await dashboard.restoreScopedLayoutOrDefault(
+      { appId: 'sales', userId: 'u2', breakpointKey: 'desktop' },
+      defaultWidgets
+    );
+
+    expect(noSaved.source).toBe('default');
+    expect(dashboard.getWidgets().map((w) => w.id)).toEqual(['default-a']);
+
+    await dashboard.saveScopedLayout({ appId: 'sales', userId: 'u2', breakpointKey: 'desktop' });
+
+    dashboard.clearLayout();
+    const withSaved = await dashboard.restoreScopedLayoutOrDefault(
+      { appId: 'sales', userId: 'u2', breakpointKey: 'desktop' },
+      [{ id: 'unused-default', type: 'kpi', x: 0, y: 0, w: 1, h: 1 }]
+    );
+
+    expect(withSaved.source).toBe('saved');
+    expect(dashboard.getWidgets().map((w) => w.id)).toEqual(['default-a']);
+  });
+
+  it('applies project-defined responsive breakpoint rules', () => {
+    const dashboard = new Dashboard({ columns: 9, rows: 12 });
+    const rules = [
+      { key: 'ultra', minWidth: 1920, columns: 12 },
+      { key: 'desktop', minWidth: 1024, columns: 9 },
+      { key: 'tablet', minWidth: 640, columns: 6 },
+      { key: 'mobile', minWidth: 0, columns: 3 }
+    ];
+
+    const selected = dashboard.applyResponsiveDimensions(500, rules);
+
+    expect(selected.key).toBe('mobile');
+    expect(dashboard.getDimensions().columns).toBe(3);
+  });
 });
