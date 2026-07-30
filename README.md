@@ -60,6 +60,34 @@ The consuming project decides which templates exist and what each size/type mean
 For example: 1x1, 1x2, and 1x3 as KPI tiles; 2x2 and 2x3 as graphs; 4x2 as lists.
 The package only enforces layout behavior and sizing.
 
+## Responsive Columns
+
+Responsive column counts are controlled by the consuming project. The package provides `setColumns` / `setDimensions`; your app decides the breakpoints.
+
+```ts
+import { Dashboard } from 'griddis';
+
+const dashboard = new Dashboard({ columns: 9 });
+
+// Project-defined breakpoint policy (example only).
+const responsiveColumns = [
+  { minWidth: 1280, columns: 9 },
+  { minWidth: 768, columns: 6 },
+  { minWidth: 0, columns: 3 }
+];
+
+function applyResponsiveColumns() {
+  const width = window.innerWidth;
+  const match = responsiveColumns.find((entry) => width >= entry.minWidth);
+  dashboard.setColumns(match?.columns ?? 3);
+}
+
+window.addEventListener('resize', applyResponsiveColumns);
+applyResponsiveColumns();
+```
+
+When columns shrink, the dashboard reflows widgets to stay within bounds and avoid overlap.
+
 ## Widget Model
 
 ```ts

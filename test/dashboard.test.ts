@@ -78,4 +78,31 @@ describe('Dashboard', () => {
       'Unable to place widget within configured row bounds'
     );
   });
+
+  it('reflows layout safely when columns shrink for responsive screens', () => {
+    const dashboard = new Dashboard({ columns: 9 });
+
+    dashboard.addWidget({ id: 'a', type: 'kpi', x: 0, y: 0, w: 3, h: 1 });
+    dashboard.addWidget({ id: 'b', type: 'kpi', x: 3, y: 0, w: 3, h: 1 });
+    dashboard.addWidget({ id: 'c', type: 'kpi', x: 6, y: 0, w: 3, h: 1 });
+
+    dashboard.setColumns(6);
+    const at6 = dashboard.getWidgets();
+    expect(at6.every((widget) => widget.x + widget.w <= 6)).toBe(true);
+
+    dashboard.setColumns(3);
+    const at3 = dashboard.getWidgets();
+
+    expect(at3).toHaveLength(3);
+    expect(at3.every((widget) => widget.x + widget.w <= 3)).toBe(true);
+
+    const collides = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) =>
+      !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+
+    for (let i = 0; i < at3.length; i += 1) {
+      for (let j = i + 1; j < at3.length; j += 1) {
+        expect(collides(at3[i], at3[j])).toBe(false);
+      }
+    }
+  });
 });

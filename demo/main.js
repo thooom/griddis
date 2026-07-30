@@ -1,11 +1,13 @@
 import { Dashboard } from 'griddis';
 
+const sceneEl = document.querySelector('.scene');
 const boardEl = document.querySelector('#board');
 const panelEl = document.querySelector('#panel');
 const widgetListEl = document.querySelector('#widget-list');
 const selectedEl = document.querySelector('#selected');
 const toastEl = document.querySelector('#toast');
 
+const fullWidthToggleBtn = document.querySelector('#full-width-toggle');
 const editModeBtn = document.querySelector('#edit-mode');
 const openPanelBtn = document.querySelector('#open-panel');
 const closePanelBtn = document.querySelector('#close-panel');
@@ -29,11 +31,21 @@ const projectWidgetTemplates = [
   { id: 'hero-4x6', type: 'hero', label: 'Hero 4×6', w: 4, h: 6 }
 ];
 
+const RESPONSIVE_LAYOUTS = [
+  { key: 'ultraWide', minWidth: 1920, columns: 12 },
+  { key: 'desktop', minWidth: 1024, columns: 9 },
+  { key: 'tablet', minWidth: 640, columns: 6 },
+  { key: 'mobile', minWidth: 0, columns: 3 }
+];
+
 const dashboard = new Dashboard({ columns: 12, rows: 10, widgetTemplates: projectWidgetTemplates });
 let selectedId = null;
 let dragState = null;
 let resizeState = null;
 let editMode = false;
+let fullWidthMode = true;
+let activeBreakpointKey = null;
+let responsiveApplyTimer = null;
 
 function notify(message) {
   if (!toastEl) return;
@@ -73,6 +85,16 @@ function updateEditModeUI() {
   renderBoard();
 }
 
+function updateWidthModeUI() {
+  if (fullWidthToggleBtn) {
+    fullWidthToggleBtn.textContent = fullWidthMode ? 'Full width: on' : 'Full width: off';
+  }
+
+  if (sceneEl) {
+    sceneEl.classList.toggle('is-constrained', !fullWidthMode);
+  }
+}
+
 function setSelected(id, options = {}) {
   selectedId = id;
   if (selectedEl) {
@@ -90,6 +112,44 @@ function getWidgetById(id) {
 
 function getTemplateById(id) {
   return dashboard.getWidgetTemplates().find((template) => template.id === id) ?? null;
+}
+
+function getResponsiveLayout() {
+  const width = window.innerWidth;
+  return RESPONSIVE_LAYOUTS.find((layout) => width >= layout.minWidth) ?? RESPONSIVE_LAYOUTS[RESPONSIVE_LAYOUTS.length - 1];
+}
+
+function getLayoutStorageKey(breakpointKey) {
+  return `demo-layout:${breakpointKey}`;
+}
+
+async function applyResponsiveColumns() {
+  const targetLayout = getResponsiveLayout();
+  const targetColumns = targetLayout.columns;
+  const { columns, rows } = dashboard.getDimensions();
+
+  if (columns !== targetColumns) {
+    dashboard.setDimensions({ columns: targetColumns, rows });
+  }
+
+  if (boardEl) {
+    boardEl.style.gridTemplateColumns = `repeat(${targetColumns}, minmax(0, 1fr))`;
+  }
+
+  if (activeBreakpointKey !== targetLayout.key) {
+    activeBreakpointKey = targetLayout.key;
+    await dashboard.restoreLayout(getLayoutStorageKey(targetLayout.key));
+  }
+}
+
+function scheduleResponsiveColumns() {
+  if (responsiveApplyTimer) {
+    clearTimeout(responsiveApplyTimer);
+  }
+
+  responsiveApplyTimer = setTimeout(() => {
+    void applyResponsiveColumns();
+  }, 120);
 }
 
 function nearestValid(value, sorted) {
@@ -386,6 +446,9 @@ function widgetMarkup(widget) {
 function renderBoard() {
   if (!boardEl) return;
 
+  const { columns } = dashboard.getDimensions();
+  boardEl.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+
   const widgets = dashboard.getWidgets();
   boardEl.innerHTML = widgets
     .map((widget) => {
@@ -527,6 +590,12 @@ editModeBtn?.addEventListener('click', () => {
   notify(editMode ? 'Edit mode enabled' : 'Read-only mode enabled');
 });
 
+fullWidthToggleBtn?.addEventListener('click', () => {
+  fullWidthMode = !fullWidthMode;
+  updateWidthModeUI();
+  notify(fullWidthMode ? 'Full width enabled' : 'Constrained width enabled');
+});
+
 openPanelBtn?.addEventListener('click', () => {
   if (!editMode) {
     notify('Enable edit mode to add widgets');
@@ -540,13 +609,15 @@ closePanelBtn?.addEventListener('click', () => {
 });
 
 saveBtn?.addEventListener('click', async () => {
-  await dashboard.saveLayout('demo-layout');
-  notify('Layout saved');
+  const breakpoint = activeBreakpointKey ?? getResponsiveLayout().key;
+  await dashboard.saveLayout(getLayoutStorageKey(breakpoint));
+  notify(`Layout saved for ${breakpoint}`);
 });
 
 restoreBtn?.addEventListener('click', async () => {
-  await dashboard.restoreLayout('demo-layout');
-  notify('Layout restored');
+  const breakpoint = activeBreakpointKey ?? getResponsiveLayout().key;
+  await dashboard.restoreLayout(getLayoutStorageKey(breakpoint));
+  notify(`Layout restored for ${breakpoint}`);
 });
 
 resetBtn?.addEventListener('click', () => {
@@ -596,7 +667,11 @@ document.addEventListener('pointercancel', (event) => {
   }
 }, true);
 
+window.addEventListener('resize', scheduleResponsiveColumns);
+
 renderWidgetList();
 seedLayout();
+void applyResponsiveColumns();
+updateWidthModeUI();
 updateEditModeUI();
 notify('Demo ready');

@@ -17,6 +17,7 @@ body {
   margin: 0;
   color: var(--ink);
   min-height: 100vh;
+  overflow-x: hidden;
   background:
     repeating-linear-gradient(
       90deg,
@@ -29,9 +30,15 @@ body {
 }
 
 .scene {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 18px 20px 24px;
+}
+
+.scene.is-constrained {
   width: min(1160px, 100vw);
   margin: 0 auto;
-  padding: 18px 20px 24px;
 }
 
 .topbar {

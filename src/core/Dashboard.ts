@@ -50,29 +50,41 @@ export class Dashboard {
     }
   }
 
+  private relayoutWidgets(): void {
+    const widgets = this.layout
+      .getAll()
+      .sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id));
+
+    const relayout: DashboardWidget[] = [];
+    for (const widget of widgets) {
+      const normalized = this.gridEngine.normalize(widget);
+      const resolved = this.collisionEngine.resolve(normalized, relayout, this.gridEngine.getRows());
+      relayout.push(resolved);
+    }
+
+    this.layout.setAll(relayout);
+  }
+
   registerPlugin(type: string, initialize?: (widget: DashboardWidget) => DashboardWidget): void {
     this.plugins.register({ type, initialize });
   }
 
   setColumns(columns: number): void {
     this.gridEngine.setColumns(columns);
-    const normalized = this.layout.getAll().map((widget) => this.gridEngine.normalize(widget));
-    this.layout.setAll(normalized);
+    this.relayoutWidgets();
     this.eventBus.emit('layoutChanged', this.layout.getAll());
   }
 
   setRows(rows?: number): void {
     this.gridEngine.setRows(rows);
-    const normalized = this.layout.getAll().map((widget) => this.gridEngine.normalize(widget));
-    this.layout.setAll(normalized);
+    this.relayoutWidgets();
     this.eventBus.emit('layoutChanged', this.layout.getAll());
   }
 
   setDimensions(dimensions: DashboardDimensions): void {
     this.gridEngine.setColumns(dimensions.columns);
     this.gridEngine.setRows(dimensions.rows);
-    const normalized = this.layout.getAll().map((widget) => this.gridEngine.normalize(widget));
-    this.layout.setAll(normalized);
+    this.relayoutWidgets();
     this.eventBus.emit('layoutChanged', this.layout.getAll());
   }
 
@@ -209,8 +221,7 @@ export class Dashboard {
     if (!saved) return this.layout.getAll();
 
     this.layout.fromJSON(saved);
-    const normalized = this.layout.getAll().map((widget) => this.gridEngine.normalize(widget));
-    this.layout.setAll(normalized);
+    this.relayoutWidgets();
     this.eventBus.emit('layoutChanged', this.layout.getAll());
     return this.layout.getAll();
   }
