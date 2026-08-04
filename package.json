@@ -1,6 +1,6 @@
 {
   "name": "griddis",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Framework-agnostic TypeScript dashboard layout engine for React, Vue, Svelte, Angular, and vanilla web apps.",
   "license": "MIT",
   "type": "module",
@@ -16,6 +16,7 @@
   },
   "files": [
     "dist",
+    "CHANGELOG.md",
     "README.md",
     "LICENSE"
   ],
