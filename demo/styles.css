@@ -349,6 +349,55 @@ body.is-dragging {
   cursor: grabbing;
 }
 
+body.is-dragging.is-swap-ready {
+  cursor: alias;
+}
+
+.widget.swap-target {
+  outline: 2px solid #1aa75b;
+  outline-offset: -2px;
+  animation: swapTargetPulse 850ms ease-in-out infinite;
+}
+
+.widget.swap-target::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--swap-logo-size, 58px);
+  height: var(--swap-logo-size, 58px);
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0.33;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='none' stroke='%231aa75b' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 33h46'/%3E%3Cpath d='M52 21l12 12-12 12'/%3E%3Cpath d='M82 67H36'/%3E%3Cpath d='M48 55L36 67l12 12'/%3E%3C/svg%3E");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.widget.swap-incompatible {
+  outline: 2px solid #d94b4b;
+  outline-offset: -2px;
+}
+
+@keyframes swapTargetPulse {
+  0%,
+  100% {
+    box-shadow: var(--card-shadow), 0 0 0 0 rgba(26, 167, 91, 0.45);
+  }
+
+  50% {
+    box-shadow: var(--card-shadow), 0 0 0 7px rgba(26, 167, 91, 0.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .widget.swap-target {
+    animation: none;
+  }
+}
+
 body.is-resizing {
   user-select: none;
 }

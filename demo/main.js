@@ -333,6 +333,12 @@ function widgetPixelSize(widget, metrics) {
   };
 }
 
+function updateSwapLogoSize(metrics) {
+  const oneByOne = Math.min(metrics.columnWidth, metrics.rowHeight);
+  const size = Math.max(28, Math.round(oneByOne * 0.8));
+  document.body.style.setProperty('--swap-logo-size', `${size}px`);
+}
+
 function updateDragPreview(clientX, clientY) {
   if (!dragState?.previewEl || !dragState.widget) return;
 
@@ -358,6 +364,60 @@ function updateDragPreview(clientX, clientY) {
   dragState.previewEl.style.top = `${top}px`;
   dragState.previewEl.style.width = `${size.width}px`;
   dragState.previewEl.style.height = `${size.height}px`;
+  updateSwapLogoSize(metrics);
+
+  updateDragHoverState(dragState.widget, x, y);
+}
+
+function collides(a, b) {
+  if (a.id === b.id) return false;
+  return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+}
+
+function updateDragHoverState(sourceWidget, x, y) {
+  if (!dragState) return;
+
+  const probe = { ...sourceWidget, x, y };
+  const overlaps = dashboard
+    .getWidgets()
+    .filter((widget) => widget.id !== sourceWidget.id)
+    .filter((widget) => collides(probe, widget));
+
+  dragState.swapTargetIds = [];
+  dragState.incompatibleTargetIds = [];
+
+  if (overlaps.length === 1 && overlaps[0].w === sourceWidget.w && overlaps[0].h === sourceWidget.h) {
+    dragState.swapTargetIds = [overlaps[0].id];
+  } else if (overlaps.length > 0) {
+    dragState.incompatibleTargetIds = overlaps.map((widget) => widget.id);
+  }
+
+  applyDragHoverIndicators();
+}
+
+function applyDragHoverIndicators() {
+  if (!boardEl) return;
+
+  for (const card of boardEl.querySelectorAll('.widget')) {
+    card.classList.remove('swap-target', 'swap-incompatible');
+  }
+
+  if (!dragState) {
+    document.body.classList.remove('is-swap-ready');
+    return;
+  }
+
+  for (const id of dragState.swapTargetIds ?? []) {
+    const target = boardEl.querySelector(`[data-id="${id}"]`);
+    target?.classList.add('swap-target');
+  }
+
+  for (const id of dragState.incompatibleTargetIds ?? []) {
+    const target = boardEl.querySelector(`[data-id="${id}"]`);
+    target?.classList.add('swap-incompatible');
+  }
+
+  document.body.classList.toggle('is-swap-ready', (dragState.swapTargetIds ?? []).length > 0);
 }
 
 function endDrag() {
@@ -374,6 +434,7 @@ function endDrag() {
   }
 
   dragState = null;
+  applyDragHoverIndicators();
 }
 
 function startDrag(cardEl, event) {
@@ -405,7 +466,9 @@ function startDrag(cardEl, event) {
     dragOffsetX: event.clientX - rect.left,
     dragOffsetY: event.clientY - rect.top,
     currentX: widget.x,
-    currentY: widget.y
+    currentY: widget.y,
+    swapTargetIds: [],
+    incompatibleTargetIds: []
   };
 
   updateDragPreview(event.clientX, event.clientY);
@@ -659,6 +722,7 @@ document.addEventListener('pointercancel', (event) => {
     dragState.sourceEl?.classList.remove('dragging');
     document.body.classList.remove('is-dragging');
     dragState = null;
+    applyDragHoverIndicators();
   } else if (resizeState && event.pointerId === resizeState.pointerId) {
     resizeState.previewEl?.remove();
     resizeState.sourceEl?.classList.remove('dragging');

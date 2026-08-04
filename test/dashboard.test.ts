@@ -162,4 +162,34 @@ describe('Dashboard', () => {
     expect(selected.key).toBe('mobile');
     expect(dashboard.getDimensions().columns).toBe(3);
   });
+
+  it('swaps widgets when moving onto same-size widget', () => {
+    const dashboard = new Dashboard({ columns: 6 });
+
+    dashboard.addWidget({ id: 'a', type: 'kpi', x: 0, y: 0, w: 2, h: 2 });
+    dashboard.addWidget({ id: 'b', type: 'kpi', x: 2, y: 0, w: 2, h: 2 });
+
+    dashboard.moveWidget('a', 2, 0);
+
+    const a = dashboard.getWidgets().find((widget) => widget.id === 'a');
+    const b = dashboard.getWidgets().find((widget) => widget.id === 'b');
+
+    expect(a).toMatchObject({ id: 'a', x: 2, y: 0, w: 2, h: 2 });
+    expect(b).toMatchObject({ id: 'b', x: 0, y: 0, w: 2, h: 2 });
+  });
+
+  it('does not swap widgets when sizes are incompatible', () => {
+    const dashboard = new Dashboard({ columns: 6 });
+
+    dashboard.addWidget({ id: 'a', type: 'kpi', x: 0, y: 0, w: 2, h: 1 });
+    dashboard.addWidget({ id: 'b', type: 'kpi', x: 2, y: 0, w: 1, h: 1 });
+
+    dashboard.moveWidget('a', 2, 0);
+
+    const a = dashboard.getWidgets().find((widget) => widget.id === 'a');
+    const b = dashboard.getWidgets().find((widget) => widget.id === 'b');
+
+    expect(a).toMatchObject({ id: 'a', x: 2, y: 1, w: 2, h: 1 });
+    expect(b).toMatchObject({ id: 'b', x: 2, y: 0, w: 1, h: 1 });
+  });
 });

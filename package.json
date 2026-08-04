@@ -1,7 +1,7 @@
 {
   "name": "griddis",
-  "version": "0.1.0",
-  "description": "Framework-agnostic dashboard widget system for web applications.",
+  "version": "0.3.0",
+  "description": "Framework-agnostic TypeScript dashboard layout engine for React, Vue, Svelte, Angular, and vanilla web apps.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/griddis.cjs",
@@ -15,10 +15,13 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "vite build && tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "dev": "vite",
     "test": "vitest run",
     "test:watch": "vitest",

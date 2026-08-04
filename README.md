@@ -1,6 +1,6 @@
 # griddis
 
-A modern, framework-agnostic TypeScript dashboard widget system with draggable and resizable grid widgets.
+A modern, framework-agnostic TypeScript dashboard layout engine with draggable and resizable grid widgets for React, Vue, Svelte, Angular, and vanilla web apps.
 
 This repository includes a tactile, ANTP-inspired demo board (wood background, floating cards, add-widget panel) so the package and its intended UX direction are visible together. Widgets are moved with drag and drop rather than directional move buttons.
 

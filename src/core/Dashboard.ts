@@ -7,13 +7,13 @@ import { PluginManager } from '../plugins/PluginManager';
 import { MemoryStorage } from '../storage/MemoryStorage';
 import { StorageAdapter } from '../storage/StorageAdapter';
 import {
-  AddWidgetFromTemplateOptions,
-  DashboardDimensions,
-  DashboardEvents,
-  DashboardWidget,
-  LayoutScope,
-  ResponsiveBreakpoint,
-  WidgetTemplate
+    AddWidgetFromTemplateOptions,
+    DashboardDimensions,
+    DashboardEvents,
+    DashboardWidget,
+    LayoutScope,
+    ResponsiveBreakpoint,
+    WidgetTemplate
 } from '../types';
 import { resolveResponsiveBreakpoint } from '../utils/responsive';
 import { Layout } from './Layout';
@@ -79,6 +79,14 @@ export class Dashboard {
     }
 
     return resolvedWidgets;
+  }
+
+  private areWidgetsSameSize(a: DashboardWidget, b: DashboardWidget): boolean {
+    return a.w === b.w && a.h === b.h;
+  }
+
+  private canPlaceWidgetAtExactPosition(widget: DashboardWidget, others: DashboardWidget[]): boolean {
+    return !others.some((other) => this.collisionEngine.collides(widget, other));
   }
 
   private createLayoutStorageKey(scope: LayoutScope): string {
@@ -209,6 +217,29 @@ export class Dashboard {
     if (!widget) throw new Error(`Widget with id "${id}" does not exist`);
 
     const moved = this.dragManager.drag(widget, x, y);
+
+    const others = this.layout.getAll().filter((item) => item.id !== id);
+    const overlapping = others.filter((other) => this.collisionEngine.collides(moved, other));
+
+    if (overlapping.length === 1) {
+      const target = overlapping[0];
+      if (this.areWidgetsSameSize(moved, target)) {
+        const swappedTarget = this.gridEngine.normalize({ ...target, x: widget.x, y: widget.y });
+        const remaining = others.filter((item) => item.id !== target.id);
+
+        if (this.canPlaceWidgetAtExactPosition(swappedTarget, remaining)) {
+          this.layout.update(swappedTarget);
+          this.layout.update(moved);
+
+          this.eventBus.emit('widgetUpdated', moved);
+          this.eventBus.emit('widgetUpdated', swappedTarget);
+          this.eventBus.emit('layoutChanged', this.layout.getAll());
+
+          return moved;
+        }
+      }
+    }
+
     return this.updateWidget(moved);
   }
 
