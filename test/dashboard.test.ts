@@ -178,6 +178,27 @@ describe('Dashboard', () => {
     expect(b).toMatchObject({ id: 'b', x: 0, y: 0, w: 2, h: 2 });
   });
 
+  it('enables swap by default', () => {
+    const dashboard = new Dashboard({ columns: 6 });
+
+    expect(dashboard.isSwapEnabled()).toBe(true);
+  });
+
+  it('allows swap behavior to be turned off', () => {
+    const dashboard = new Dashboard({ columns: 6, swapEnabled: false });
+
+    dashboard.addWidget({ id: 'a', type: 'kpi', x: 0, y: 0, w: 2, h: 2 });
+    dashboard.addWidget({ id: 'b', type: 'kpi', x: 2, y: 0, w: 2, h: 2 });
+
+    dashboard.moveWidget('a', 2, 0);
+
+    const a = dashboard.getWidgets().find((widget) => widget.id === 'a');
+    const b = dashboard.getWidgets().find((widget) => widget.id === 'b');
+
+    expect(a).toMatchObject({ id: 'a', x: 2, y: 2, w: 2, h: 2 });
+    expect(b).toMatchObject({ id: 'b', x: 2, y: 0, w: 2, h: 2 });
+  });
+
   it('does not swap widgets when sizes are incompatible', () => {
     const dashboard = new Dashboard({ columns: 6 });
 

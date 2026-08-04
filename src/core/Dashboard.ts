@@ -7,13 +7,13 @@ import { PluginManager } from '../plugins/PluginManager';
 import { MemoryStorage } from '../storage/MemoryStorage';
 import { StorageAdapter } from '../storage/StorageAdapter';
 import {
-    AddWidgetFromTemplateOptions,
-    DashboardDimensions,
-    DashboardEvents,
-    DashboardWidget,
-    LayoutScope,
-    ResponsiveBreakpoint,
-    WidgetTemplate
+  AddWidgetFromTemplateOptions,
+  DashboardDimensions,
+  DashboardEvents,
+  DashboardWidget,
+  LayoutScope,
+  ResponsiveBreakpoint,
+  WidgetTemplate
 } from '../types';
 import { resolveResponsiveBreakpoint } from '../utils/responsive';
 import { Layout } from './Layout';
@@ -21,6 +21,7 @@ import { Layout } from './Layout';
 export interface DashboardOptions {
   columns?: number;
   rows?: number;
+  swapEnabled?: boolean;
   widgetTemplates?: WidgetTemplate[];
   storage?: StorageAdapter;
   eventBus?: EventBus<DashboardEvents>;
@@ -35,6 +36,7 @@ export class Dashboard {
   private readonly gridEngine: GridEngine;
   private readonly dragManager: DragManager;
   private readonly resizeManager: ResizeManager;
+  private swapEnabled: boolean;
   private widgetTemplates = new Map<string, WidgetTemplate>();
   private templateCounter = 0;
 
@@ -47,6 +49,7 @@ export class Dashboard {
     this.resizeManager = new ResizeManager(this.gridEngine);
     this.storage = options.storage ?? new MemoryStorage();
     this.eventBus = options.eventBus ?? new EventBus<DashboardEvents>();
+    this.swapEnabled = options.swapEnabled ?? true;
 
     if (options.widgetTemplates) {
       this.setWidgetTemplates(options.widgetTemplates);
@@ -124,6 +127,14 @@ export class Dashboard {
       columns: this.gridEngine.getColumns(),
       rows: this.gridEngine.getRows()
     };
+  }
+
+  setSwapEnabled(enabled: boolean): void {
+    this.swapEnabled = enabled;
+  }
+
+  isSwapEnabled(): boolean {
+    return this.swapEnabled;
   }
 
   applyResponsiveDimensions(width: number, breakpoints: ResponsiveBreakpoint[]): ResponsiveBreakpoint {
@@ -221,7 +232,7 @@ export class Dashboard {
     const others = this.layout.getAll().filter((item) => item.id !== id);
     const overlapping = others.filter((other) => this.collisionEngine.collides(moved, other));
 
-    if (overlapping.length === 1) {
+    if (this.swapEnabled && overlapping.length === 1) {
       const target = overlapping[0];
       if (this.areWidgetsSameSize(moved, target)) {
         const swappedTarget = this.gridEngine.normalize({ ...target, x: widget.x, y: widget.y });

@@ -11,6 +11,7 @@ This repository includes a tactile, ANTP-inspired demo board (wood background, f
 - Widget resizing API
 - Snap-to-grid positioning
 - Collision detection and resolution
+- Optional same-size widget swap on drag collisions (enabled by default)
 - Configurable grid dimensions (columns and optional row bounds)
 - Template-based widget catalog controlled by the consuming project
 - Save and restore layouts as JSON
@@ -32,6 +33,7 @@ import { Dashboard } from 'griddis';
 const dashboard = new Dashboard({
   columns: 12,
   rows: 10,
+  swapEnabled: true,
   widgetTemplates: [
     { id: 'kpi-1x1', type: 'kpi', w: 1, h: 1, label: 'KPI 1x1' },
     { id: 'graph-2x2', type: 'graph', w: 2, h: 2, label: 'Graph 2x2' },
@@ -54,6 +56,9 @@ dashboard.addWidgetFromTemplate('graph-2x2', {
   x: 0,
   y: 0
 });
+
+// Optional runtime toggle if your app needs to disable swap behavior.
+dashboard.setSwapEnabled(false);
 ```
 
 The consuming project decides which templates exist and what each size/type means.
