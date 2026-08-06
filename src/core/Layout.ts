@@ -48,6 +48,7 @@ export class Layout {
     if (minH !== null) widget.minH = minH;
     if (maxW !== null) widget.maxW = maxW;
     if (maxH !== null) widget.maxH = maxH;
+    if (candidate.locked === true) widget.locked = true;
     if (candidate.data !== undefined) widget.data = candidate.data;
 
     return widget;

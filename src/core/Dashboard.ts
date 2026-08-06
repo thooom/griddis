@@ -61,11 +61,19 @@ export class Dashboard {
       .getAll()
       .sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id));
 
+    // Locked widgets are pinned first as immovable anchors.
     const relayout: DashboardWidget[] = [];
     for (const widget of widgets) {
-      const normalized = this.gridEngine.normalize(widget);
-      const resolved = this.collisionEngine.resolve(normalized, relayout, this.gridEngine.getRows());
-      relayout.push(resolved);
+      if (widget.locked) {
+        relayout.push(this.gridEngine.normalize(widget));
+      }
+    }
+    for (const widget of widgets) {
+      if (!widget.locked) {
+        const normalized = this.gridEngine.normalize(widget);
+        const resolved = this.collisionEngine.resolve(normalized, relayout, this.gridEngine.getRows());
+        relayout.push(resolved);
+      }
     }
 
     this.layout.setAll(relayout);
@@ -75,10 +83,18 @@ export class Dashboard {
     const ordered = [...widgets].sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id));
     const resolvedWidgets: DashboardWidget[] = [];
 
+    // Pin locked widgets first so others resolve around them.
     for (const widget of ordered) {
-      const normalized = this.gridEngine.normalize(widget);
-      const resolved = this.collisionEngine.resolve(normalized, resolvedWidgets, this.gridEngine.getRows());
-      resolvedWidgets.push(resolved);
+      if (widget.locked) {
+        resolvedWidgets.push(this.gridEngine.normalize(widget));
+      }
+    }
+    for (const widget of ordered) {
+      if (!widget.locked) {
+        const normalized = this.gridEngine.normalize(widget);
+        const resolved = this.collisionEngine.resolve(normalized, resolvedWidgets, this.gridEngine.getRows());
+        resolvedWidgets.push(resolved);
+      }
     }
 
     return resolvedWidgets;
@@ -187,6 +203,7 @@ export class Dashboard {
       minH: template.minH,
       maxW: template.maxW,
       maxH: template.maxH,
+      locked: template.locked,
       data: options.data
     });
   }
@@ -208,8 +225,13 @@ export class Dashboard {
   }
 
   updateWidget(widget: DashboardWidget): DashboardWidget {
-    if (!this.layout.get(widget.id)) {
+    const existing = this.layout.get(widget.id);
+    if (!existing) {
       throw new Error(`Widget with id "${widget.id}" does not exist`);
+    }
+
+    if (existing.locked) {
+      throw new Error(`Widget with id "${widget.id}" is locked and cannot be modified`);
     }
 
     const normalized = this.gridEngine.normalize(widget);
@@ -226,6 +248,7 @@ export class Dashboard {
   moveWidget(id: string, x: number, y: number): DashboardWidget {
     const widget = this.layout.get(id);
     if (!widget) throw new Error(`Widget with id "${id}" does not exist`);
+    if (widget.locked) throw new Error(`Widget with id "${id}" is locked and cannot be moved`);
 
     const moved = this.dragManager.drag(widget, x, y);
 
@@ -257,12 +280,16 @@ export class Dashboard {
   resizeWidget(id: string, w: number, h: number): DashboardWidget {
     const widget = this.layout.get(id);
     if (!widget) throw new Error(`Widget with id "${id}" does not exist`);
+    if (widget.locked) throw new Error(`Widget with id "${id}" is locked and cannot be resized`);
 
     const resized = this.resizeManager.resize(widget, w, h);
     return this.updateWidget(resized);
   }
 
   removeWidget(id: string): DashboardWidget | undefined {
+    const widget = this.layout.get(id);
+    if (widget?.locked) throw new Error(`Widget with id "${id}" is locked and cannot be removed`);
+
     const removed = this.layout.remove(id);
     if (!removed) return undefined;
 

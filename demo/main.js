@@ -196,6 +196,7 @@ function startResize(cardEl, event, direction) {
 
   const widget = getWidgetById(id);
   if (!widget) return;
+  if (widget.locked) return;
 
   event.stopPropagation();
   event.preventDefault();
@@ -538,6 +539,7 @@ function startDrag(cardEl, event) {
 
   const widget = getWidgetById(id);
   if (!widget) return;
+  if (widget.locked) return;
 
   const rect = cardEl.getBoundingClientRect();
   const previewEl = cardEl.cloneNode(true);
@@ -687,6 +689,7 @@ function isInteractiveTarget(value) {
 function applyKeyboardMove(id, dx, dy) {
   const widget = getWidgetById(id);
   if (!widget) return;
+  if (widget.locked) { notify('Widget is locked'); return; }
 
   try {
     dashboard.moveWidget(widget.id, widget.x + dx, widget.y + dy);
@@ -698,6 +701,7 @@ function applyKeyboardMove(id, dx, dy) {
 function applyKeyboardResize(id, axis, direction) {
   const widget = getWidgetById(id);
   if (!widget) return;
+  if (widget.locked) { notify('Widget is locked'); return; }
 
   const validSizes = dashboard.getValidSizesForType(widget.type);
   if (!validSizes.length) return;
@@ -798,16 +802,19 @@ function renderBoard() {
   boardEl.innerHTML = widgets
     .map((widget) => {
       const selectedClass = widget.id === selectedId ? ' selected' : '';
+      const lockedClass = widget.locked ? ' locked' : '';
+      const lockedAttr = widget.locked ? ' data-locked="true"' : '';
       const style = `grid-column:${widget.x + 1} / span ${widget.w}; grid-row:${widget.y + 1} / span ${widget.h};`;
       const safeTitle = escapeHtml(widget.type.toUpperCase());
       const safeId = escapeHtml(widget.id);
-      return `<article class="widget ${selectedClass}" data-id="${safeId}" style="${style}" title="${safeTitle}" tabindex="${editMode ? '0' : '-1'}" role="group" aria-label="${safeTitle} widget ${safeId}">
-        ${editMode ? `<button class="remove" data-remove="${safeId}" aria-label="Remove widget">x</button>` : ''}
+      const canEdit = editMode && !widget.locked;
+      return `<article class="widget${selectedClass}${lockedClass}" data-id="${safeId}"${lockedAttr} style="${style}" title="${safeTitle}" tabindex="${editMode ? '0' : '-1'}" role="group" aria-label="${safeTitle} widget ${safeId}${widget.locked ? ' (locked)' : ''}">
+        ${canEdit ? `<button class="remove" data-remove="${safeId}" aria-label="Remove widget">x</button>` : ''}
         ${widgetMarkup(widget)}
-        ${editMode ? `<button type="button" class="resize-handle resize-n" data-resize="${safeId}" data-dir="n" aria-label="Resize ${safeTitle} widget north"></button>` : ''}
-        ${editMode ? `<button type="button" class="resize-handle resize-e" data-resize="${safeId}" data-dir="e" aria-label="Resize ${safeTitle} widget east"></button>` : ''}
-        ${editMode ? `<button type="button" class="resize-handle resize-s" data-resize="${safeId}" data-dir="s" aria-label="Resize ${safeTitle} widget south"></button>` : ''}
-        ${editMode ? `<button type="button" class="resize-handle resize-w" data-resize="${safeId}" data-dir="w" aria-label="Resize ${safeTitle} widget west"></button>` : ''}
+        ${canEdit ? `<button type="button" class="resize-handle resize-n" data-resize="${safeId}" data-dir="n" aria-label="Resize ${safeTitle} widget north"></button>` : ''}
+        ${canEdit ? `<button type="button" class="resize-handle resize-e" data-resize="${safeId}" data-dir="e" aria-label="Resize ${safeTitle} widget east"></button>` : ''}
+        ${canEdit ? `<button type="button" class="resize-handle resize-s" data-resize="${safeId}" data-dir="s" aria-label="Resize ${safeTitle} widget south"></button>` : ''}
+        ${canEdit ? `<button type="button" class="resize-handle resize-w" data-resize="${safeId}" data-dir="w" aria-label="Resize ${safeTitle} widget west"></button>` : ''}
       </article>`;
     })
     .join('');
@@ -855,9 +862,11 @@ function addWidget(templateId) {
 }
 
 function seedLayout() {
-  const existingIds = dashboard.getWidgets().map((widget) => widget.id);
-  for (const id of existingIds) {
-    dashboard.removeWidget(id);
+  // Only remove unlocked widgets; locked ones are permanent fixtures.
+  for (const widget of dashboard.getWidgets()) {
+    if (!widget.locked) {
+      dashboard.removeWidget(widget.id);
+    }
   }
 
   const initial = [
@@ -872,6 +881,11 @@ function seedLayout() {
       x: item.x,
       y: item.y
     });
+  }
+
+  // Locked anchor widget — pinned, immovable, and not removable via the UI.
+  if (!dashboard.getWidgets().find((w) => w.id === 'hero')) {
+    dashboard.addWidget({ id: 'hero', type: 'kpi', x: 2, y: 0, w: 2, h: 2, locked: true });
   }
 
   const firstId = dashboard.getWidgets()[0]?.id ?? null;

@@ -9,6 +9,7 @@ export interface DashboardWidget {
   minH?: number;
   maxW?: number;
   maxH?: number;
+  locked?: boolean;
   data?: unknown;
 }
 
@@ -26,6 +27,7 @@ export interface WidgetTemplate {
   minH?: number;
   maxW?: number;
   maxH?: number;
+  locked?: boolean;
   label?: string;
 }
 

@@ -3,6 +3,18 @@
 All notable changes to this project are documented in this file.
 
 ## [0.3.5] - 2026-08-06
+## [0.3.6] - 2026-08-06
+
+### Added
+- Added `locked?: boolean` field to `DashboardWidget` and `WidgetTemplate` interfaces.
+- Locked widgets act as immovable anchors: `moveWidget`, `resizeWidget`, `updateWidget`, and `removeWidget` throw when called on a locked widget.
+- Collision engine and relayout pass treat locked widgets as fixed obstacles — other widgets resolve around them, not the reverse.
+- `locked` field is preserved through JSON save and restore via `Layout.sanitizeWidget`.
+- `addWidgetFromTemplate` carries `locked` from the template definition to the created widget.
+- Demo: locked widgets hide drag handles, resize handles, and the remove button. Keyboard move/resize notifies the user instead of attempting the operation.
+- Demo: a pinned `hero` widget is included in the default seed layout to demonstrate the feature visually (marked with a lock indicator).
+
+## [0.3.5] - 2026-08-06
 
 ### Added
 - Added keyboard interaction support in the demo for selecting, moving, and resizing widgets.

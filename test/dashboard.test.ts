@@ -256,4 +256,81 @@ describe('Dashboard', () => {
     expect(restored.map((widget) => widget.id)).toEqual(['valid-a', 'valid-b']);
     expect(restored.every((widget) => widget.w > 0 && widget.h > 0)).toBe(true);
   });
+
+  describe('locked widgets', () => {
+    it('cannot be moved', () => {
+      const dashboard = new Dashboard({ columns: 4 });
+      dashboard.addWidget({ id: 'a', type: 'kpi', x: 0, y: 0, w: 2, h: 1, locked: true });
+
+      expect(() => dashboard.moveWidget('a', 1, 1)).toThrow(
+        'Widget with id "a" is locked and cannot be moved'
+      );
+    });
+
+    it('cannot be resized', () => {
+      const dashboard = new Dashboard({ columns: 4 });
+      dashboard.addWidget({ id: 'a', type: 'kpi', x: 0, y: 0, w: 2, h: 1, locked: true });
+
+      expect(() => dashboard.resizeWidget('a', 3, 2)).toThrow(
+        'Widget with id "a" is locked and cannot be resized'
+      );
+    });
+
+    it('cannot be removed', () => {
+      const dashboard = new Dashboard({ columns: 4 });
+      dashboard.addWidget({ id: 'a', type: 'kpi', x: 0, y: 0, w: 2, h: 1, locked: true });
+
+      expect(() => dashboard.removeWidget('a')).toThrow(
+        'Widget with id "a" is locked and cannot be removed'
+      );
+    });
+
+    it('cannot be updated via updateWidget', () => {
+      const dashboard = new Dashboard({ columns: 4 });
+      dashboard.addWidget({ id: 'a', type: 'kpi', x: 0, y: 0, w: 2, h: 1, locked: true });
+
+      expect(() =>
+        dashboard.updateWidget({ id: 'a', type: 'kpi', x: 1, y: 0, w: 2, h: 1, locked: true })
+      ).toThrow('Widget with id "a" is locked and cannot be modified');
+    });
+
+    it('collision resolves around locked widgets without moving them', () => {
+      const dashboard = new Dashboard({ columns: 4 });
+      dashboard.addWidget({ id: 'anchor', type: 'kpi', x: 0, y: 0, w: 4, h: 1, locked: true });
+      const pushed = dashboard.addWidget({ id: 'b', type: 'kpi', x: 0, y: 0, w: 4, h: 1 });
+
+      const anchor = dashboard.getWidgets().find((w) => w.id === 'anchor')!;
+      expect(anchor.y).toBe(0);
+      expect(pushed.y).toBe(1);
+    });
+
+    it('locked flag survives save and restore', async () => {
+      const store = new Map<string, string>();
+      const storage = {
+        async save(key: string, value: string) { store.set(key, value); },
+        async load(key: string) { return store.get(key) ?? null; }
+      };
+
+      const dashboard = new Dashboard({ storage });
+      dashboard.addWidget({ id: 'a', type: 'kpi', x: 0, y: 0, w: 2, h: 1, locked: true });
+      await dashboard.saveLayout('lock-test');
+
+      dashboard.addWidget({ id: 'b', type: 'kpi', x: 0, y: 1, w: 2, h: 1 });
+      await dashboard.restoreLayout('lock-test');
+
+      const restored = dashboard.getWidgets().find((w) => w.id === 'a')!;
+      expect(restored.locked).toBe(true);
+    });
+
+    it('addWidgetFromTemplate carries locked from template', () => {
+      const dashboard = new Dashboard({
+        columns: 4,
+        widgetTemplates: [{ id: 'pinned-kpi', type: 'kpi', w: 2, h: 2, locked: true }]
+      });
+
+      const widget = dashboard.addWidgetFromTemplate('pinned-kpi', { id: 'p1', x: 0, y: 0 });
+      expect(widget.locked).toBe(true);
+      expect(() => dashboard.moveWidget('p1', 1, 0)).toThrow();
+    });
+  });
 });

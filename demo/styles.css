@@ -253,6 +253,22 @@ h1 {
   outline: 2px solid #6f74ff;
 }
 
+  .widget.locked {
+    cursor: default;
+    outline: none;
+  }
+
+  .widget.locked::after {
+    content: '🔒';
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    font-size: 11px;
+    opacity: 0.55;
+    pointer-events: none;
+    line-height: 1;
+  }
+
 .widget button.remove {
   position: absolute;
   top: 8px;

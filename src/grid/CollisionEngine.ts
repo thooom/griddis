@@ -10,6 +10,7 @@ export class CollisionEngine {
   resolve(widget: DashboardWidget, others: DashboardWidget[], maxRows?: number): DashboardWidget {
     const resolved = { ...widget };
 
+    // Locked widgets are immovable anchors; non-locked widgets resolve around them.
     while (others.some((other) => this.collides(resolved, other))) {
       resolved.y += 1;
 
