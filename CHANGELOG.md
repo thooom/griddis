@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.5] - 2026-08-06
+
+### Added
+- Added keyboard interaction support in the demo for selecting, moving, and resizing widgets.
+- Added accessibility semantics for interactive widget controls, including focusable cards and labeled resize controls.
+- Added tests for restore-layout resilience with malformed and partially valid persisted payloads.
+
+### Changed
+- Changed layout restore behavior to validate persisted payloads and keep previous layout if restore data is invalid.
+- Optimized demo interaction performance by reducing drag/resize hot-path scans and updating swap indicators differentially.
+- Optimized demo event handling by using delegated board listeners instead of rebinding per-widget listeners on each render.
+- Fixed resize pointer-cancel cleanup to remove blocked-state styling consistently.
+
 ## [0.3.4] - 2026-08-06
 
 ### Added
