@@ -144,6 +144,8 @@ Use app-level state to gate interactions in your UI. In the demo app, edit mode 
 
 ### Add Widgets
 
+![Add and Remove](https://raw.githubusercontent.com/thooom/griddis/main/assets/add_and_remove.gif)
+
 Use template-based adds when you want strict size/type control:
 
 ```ts
@@ -157,6 +159,9 @@ dashboard.addWidgetFromTemplate('graph-2x2', {
 Use addWidget when your app already has a fully composed widget object.
 
 ### Move Widgets and Swap
+
+![Move and Swap](https://raw.githubusercontent.com/thooom/griddis/main/assets/move_and_swap.gif)
+
 
 Use moveWidget for drag-and-drop updates:
 
@@ -173,6 +178,8 @@ const swapEnabled = dashboard.isSwapEnabled();
 ```
 
 ### Resize Widgets
+
+![Resize](https://raw.githubusercontent.com/thooom/griddis/main/assets/resize.gif)
 
 Use resizeWidget for programmatic size updates:
 

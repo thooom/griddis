@@ -7,13 +7,13 @@ import { PluginManager } from '../plugins/PluginManager';
 import { MemoryStorage } from '../storage/MemoryStorage';
 import { StorageAdapter } from '../storage/StorageAdapter';
 import {
-  AddWidgetFromTemplateOptions,
-  DashboardDimensions,
-  DashboardEvents,
-  DashboardWidget,
-  LayoutScope,
-  ResponsiveBreakpoint,
-  WidgetTemplate
+    AddWidgetFromTemplateOptions,
+    DashboardDimensions,
+    DashboardEvents,
+    DashboardWidget,
+    LayoutScope,
+    ResponsiveBreakpoint,
+    WidgetTemplate
 } from '../types';
 import { resolveResponsiveBreakpoint } from '../utils/responsive';
 import { Layout } from './Layout';
@@ -257,7 +257,7 @@ export class Dashboard {
 
     if (this.swapEnabled && overlapping.length === 1) {
       const target = overlapping[0];
-      if (this.areWidgetsSameSize(moved, target)) {
+      if (!target.locked && this.areWidgetsSameSize(moved, target)) {
         const swappedTarget = this.gridEngine.normalize({ ...target, x: widget.x, y: widget.y });
         const remaining = others.filter((item) => item.id !== target.id);
 

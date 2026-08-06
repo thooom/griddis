@@ -332,5 +332,20 @@ describe('Dashboard', () => {
       expect(widget.locked).toBe(true);
       expect(() => dashboard.moveWidget('p1', 1, 0)).toThrow();
     });
+
+    it('cannot swap with a locked widget target', () => {
+      const dashboard = new Dashboard({ columns: 6, swapEnabled: true });
+
+      dashboard.addWidget({ id: 'locked-target', type: 'kpi', x: 2, y: 0, w: 2, h: 2, locked: true });
+      dashboard.addWidget({ id: 'mover', type: 'kpi', x: 0, y: 0, w: 2, h: 2 });
+
+      dashboard.moveWidget('mover', 2, 0);
+
+      const target = dashboard.getWidgets().find((widget) => widget.id === 'locked-target');
+      const mover = dashboard.getWidgets().find((widget) => widget.id === 'mover');
+
+      expect(target).toMatchObject({ id: 'locked-target', x: 2, y: 0, w: 2, h: 2, locked: true });
+      expect(mover).toMatchObject({ id: 'mover', x: 2, y: 2, w: 2, h: 2 });
+    });
   });
 });

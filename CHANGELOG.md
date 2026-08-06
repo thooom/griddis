@@ -2,7 +2,6 @@
 
 All notable changes to this project are documented in this file.
 
-## [0.3.5] - 2026-08-06
 ## [0.3.6] - 2026-08-06
 
 ### Added
@@ -13,6 +12,14 @@ All notable changes to this project are documented in this file.
 - `addWidgetFromTemplate` carries `locked` from the template definition to the created widget.
 - Demo: locked widgets hide drag handles, resize handles, and the remove button. Keyboard move/resize notifies the user instead of attempting the operation.
 - Demo: a pinned `hero` widget is included in the default seed layout to demonstrate the feature visually (marked with a lock indicator).
+
+### Changed
+- Updated README with dedicated interaction GIFs for add/remove, move/swap, and resize behavior.
+
+### Fixed
+- Fixed swap behavior to prevent locked widgets from being used as swap targets during drag moves.
+- Fixed demo drag hover indicators so locked overlap targets are marked as incompatible (red outline) instead of swap-ready.
+- Fixed demo drop handling to force non-swap move resolution when dropping onto a locked same-size target.
 
 ## [0.3.5] - 2026-08-06
 

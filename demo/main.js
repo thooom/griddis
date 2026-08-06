@@ -444,7 +444,12 @@ function updateDragHoverState(sourceWidget, x, y) {
   const nextSwapTargetIds = [];
   const nextIncompatibleTargetIds = [];
 
-  if (overlaps.length === 1 && overlaps[0].w === sourceWidget.w && overlaps[0].h === sourceWidget.h) {
+  if (
+    overlaps.length === 1
+    && !overlaps[0].locked
+    && overlaps[0].w === sourceWidget.w
+    && overlaps[0].h === sourceWidget.h
+  ) {
     nextSwapTargetIds.push(overlaps[0].id);
   } else if (overlaps.length > 0) {
     nextIncompatibleTargetIds.push(...overlaps.map((widget) => widget.id));
@@ -519,11 +524,32 @@ function applyDragHoverIndicators() {
 function endDrag() {
   if (!dragState) return;
 
+  const finalizedDragState = dragState;
   const widget = getWidgetById(dragState.widget.id);
   cleanupDragArtifacts();
 
-  if (widget && Number.isFinite(dragState.currentX) && Number.isFinite(dragState.currentY)) {
-    dashboard.moveWidget(widget.id, dragState.currentX, dragState.currentY);
+  if (widget && Number.isFinite(finalizedDragState.currentX) && Number.isFinite(finalizedDragState.currentY)) {
+    const probe = { ...widget, x: finalizedDragState.currentX, y: finalizedDragState.currentY };
+    const overlaps = (finalizedDragState.otherWidgets ?? dashboard
+      .getWidgets()
+      .filter((item) => item.id !== widget.id))
+      .filter((item) => collides(probe, item));
+    const isLockedSwapShape = overlaps.length === 1
+      && overlaps[0].locked
+      && overlaps[0].w === widget.w
+      && overlaps[0].h === widget.h;
+
+    if (isLockedSwapShape && dashboard.isSwapEnabled()) {
+      dashboard.setSwapEnabled(false);
+      try {
+        dashboard.moveWidget(widget.id, finalizedDragState.currentX, finalizedDragState.currentY);
+      } finally {
+        dashboard.setSwapEnabled(true);
+      }
+    } else {
+      dashboard.moveWidget(widget.id, finalizedDragState.currentX, finalizedDragState.currentY);
+    }
+
     setSelected(widget.id);
   }
 
