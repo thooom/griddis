@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.3] - 2026-08-06
+
+### Added
+- Added resize-overlap blocking in the demo with invalid-state red feedback during preview.
+- Added a dedicated blocked resize visual state for the source card and resize preview.
+
+### Changed
+- Improved demo drag behavior with a persistent ghost origin style while dragging.
+- Reduced unnecessary drag-time UI updates by throttling pointer move rendering with `requestAnimationFrame` and skipping unchanged hover state updates.
+
 ## [0.3.2] - 2026-08-04
 
 ### Added

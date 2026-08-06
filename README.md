@@ -306,6 +306,9 @@ The demo is intentionally styled to resemble a tactile browser start-page dashbo
 
 - Add and remove widgets
 - Drag and resize selected widgets
+- Same-size swap candidate feedback (green), incompatible overlap feedback (red), and swap cursor hints during drag
+- Ghost drag origin and live drag preview while moving widgets
+- Resize overlap blocking with red invalid feedback when a resize would collide
 - Save and restore layout
 - Reset to a seeded reference layout
 

@@ -138,6 +138,31 @@ h1 {
   opacity: 0.12;
 }
 
+.widget.resize-blocked {
+  outline: 2px solid #d94b4b;
+  outline-offset: -2px;
+}
+
+.resize-preview.resize-blocked {
+  border-color: #d94b4b;
+  background: rgba(217, 75, 75, 0.1);
+}
+
+.widget.drag-origin-ghost {
+  opacity: 0.3;
+  border: 1px dashed rgba(60, 44, 33, 0.45);
+  background:
+    repeating-linear-gradient(
+      45deg,
+      rgba(80, 62, 48, 0.08) 0,
+      rgba(80, 62, 48, 0.08) 8px,
+      rgba(255, 255, 255, 0.06) 8px,
+      rgba(255, 255, 255, 0.06) 16px
+    ),
+    linear-gradient(90deg, #ffffff 0%, #f7f7f7 42%, #ffffff 100%);
+  transform: none;
+}
+
 .resize-handle {
   position: absolute;
   z-index: 3;

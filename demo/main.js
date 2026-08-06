@@ -46,6 +46,8 @@ let editMode = false;
 let fullWidthMode = true;
 let activeBreakpointKey = null;
 let responsiveApplyTimer = null;
+let dragMoveFrame = null;
+let pendingDragPointer = null;
 
 function notify(message) {
   if (!toastEl) return;
@@ -70,19 +72,32 @@ function updateEditModeUI() {
   if (!editMode) {
     panelEl?.classList.add('hidden');
     if (dragState) {
-      dragState.previewEl?.remove();
-      dragState.sourceEl?.classList.remove('dragging');
+      cleanupDragArtifacts();
       dragState = null;
     }
     if (resizeState) {
       resizeState.previewEl?.remove();
-      resizeState.sourceEl?.classList.remove('dragging');
+      resizeState.sourceEl?.classList.remove('dragging', 'resize-blocked');
       resizeState = null;
     }
     document.body.classList.remove('is-dragging', 'is-resizing');
   }
 
   renderBoard();
+}
+
+function cleanupDragArtifacts() {
+  if (!dragState) return;
+
+  dragState.previewEl?.remove();
+  dragState.sourceEl?.classList.remove('dragging', 'drag-origin-ghost');
+
+  if (dragMoveFrame !== null) {
+    cancelAnimationFrame(dragMoveFrame);
+    dragMoveFrame = null;
+  }
+  pendingDragPointer = null;
+  document.body.classList.remove('is-dragging', 'is-swap-ready');
 }
 
 function updateWidthModeUI() {
@@ -204,7 +219,8 @@ function startResize(cardEl, event, direction) {
     boardLeft,
     boardTop,
     originalRight: widget.x + widget.w,
-    originalBottom: widget.y + widget.h
+    originalBottom: widget.y + widget.h,
+    isBlocked: false
   };
 
   cardEl.setPointerCapture(event.pointerId);
@@ -257,6 +273,14 @@ function updateResizePreview(clientX, clientY) {
   resizeState.currentX = newX;
   resizeState.currentY = newY;
 
+  const candidate = { id: widget.id, x: newX, y: newY, w: newW, h: newH };
+  const others = dashboard.getWidgets().filter((item) => item.id !== widget.id);
+  const blocked = others.some((item) => collides(candidate, item));
+
+  resizeState.isBlocked = blocked;
+  resizeState.sourceEl.classList.toggle('resize-blocked', blocked);
+  resizeState.previewEl.classList.toggle('resize-blocked', blocked);
+
   const previewWidth = newW * metrics.columnWidth + Math.max(0, newW - 1) * metrics.gap;
   const previewHeight = newH * metrics.rowHeight + Math.max(0, newH - 1) * metrics.gap;
   const previewLeft = metrics.boardRect.left + newX * (metrics.columnWidth + metrics.gap);
@@ -271,14 +295,20 @@ function endResize() {
   if (!resizeState) return;
 
   resizeState.previewEl.remove();
-  resizeState.sourceEl.classList.remove('dragging');
+  resizeState.sourceEl.classList.remove('dragging', 'resize-blocked');
   document.body.classList.remove('is-resizing');
 
-  const { id, widget, currentW, currentH, currentX, currentY } = resizeState;
+  const { id, widget, currentW, currentH, currentX, currentY, isBlocked } = resizeState;
   resizeState = null;
 
   const changed = currentW !== widget.w || currentH !== widget.h || currentX !== widget.x || currentY !== widget.y;
   if (changed) {
+    if (isBlocked) {
+      notify('Cannot resize here');
+      renderBoard();
+      return;
+    }
+
     try {
       dashboard.updateWidget({ ...widget, x: currentX, y: currentY, w: currentW, h: currentH });
       setSelected(id);
@@ -339,6 +369,14 @@ function updateSwapLogoSize(metrics) {
   document.body.style.setProperty('--swap-logo-size', `${size}px`);
 }
 
+function sameIds(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 function updateDragPreview(clientX, clientY) {
   if (!dragState?.previewEl || !dragState.widget) return;
 
@@ -351,6 +389,10 @@ function updateDragPreview(clientX, clientY) {
   );
 
   if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return;
+  }
+
+  if (dragState.currentX === x && dragState.currentY === y) {
     return;
   }
 
@@ -383,14 +425,27 @@ function updateDragHoverState(sourceWidget, x, y) {
     .filter((widget) => widget.id !== sourceWidget.id)
     .filter((widget) => collides(probe, widget));
 
-  dragState.swapTargetIds = [];
-  dragState.incompatibleTargetIds = [];
+  const nextSwapTargetIds = [];
+  const nextIncompatibleTargetIds = [];
 
   if (overlaps.length === 1 && overlaps[0].w === sourceWidget.w && overlaps[0].h === sourceWidget.h) {
-    dragState.swapTargetIds = [overlaps[0].id];
+    nextSwapTargetIds.push(overlaps[0].id);
   } else if (overlaps.length > 0) {
-    dragState.incompatibleTargetIds = overlaps.map((widget) => widget.id);
+    nextIncompatibleTargetIds.push(...overlaps.map((widget) => widget.id));
   }
+
+  nextSwapTargetIds.sort();
+  nextIncompatibleTargetIds.sort();
+
+  if (
+    sameIds(nextSwapTargetIds, dragState.swapTargetIds ?? [])
+    && sameIds(nextIncompatibleTargetIds, dragState.incompatibleTargetIds ?? [])
+  ) {
+    return;
+  }
+
+  dragState.swapTargetIds = nextSwapTargetIds;
+  dragState.incompatibleTargetIds = nextIncompatibleTargetIds;
 
   applyDragHoverIndicators();
 }
@@ -424,9 +479,7 @@ function endDrag() {
   if (!dragState) return;
 
   const widget = getWidgetById(dragState.widget.id);
-  dragState.previewEl?.remove();
-  dragState.sourceEl?.classList.remove('dragging');
-  document.body.classList.remove('is-dragging');
+  cleanupDragArtifacts();
 
   if (widget && Number.isFinite(dragState.currentX) && Number.isFinite(dragState.currentY)) {
     dashboard.moveWidget(widget.id, dragState.currentX, dragState.currentY);
@@ -455,6 +508,7 @@ function startDrag(cardEl, event) {
 
   document.body.appendChild(previewEl);
   cardEl.classList.add('dragging');
+  cardEl.classList.add('drag-origin-ghost');
   document.body.classList.add('is-dragging');
 
   dragState = {
@@ -465,8 +519,8 @@ function startDrag(cardEl, event) {
     pointerId: event.pointerId,
     dragOffsetX: event.clientX - rect.left,
     dragOffsetY: event.clientY - rect.top,
-    currentX: widget.x,
-    currentY: widget.y,
+    currentX: Number.NaN,
+    currentY: Number.NaN,
     swapTargetIds: [],
     incompatibleTargetIds: []
   };
@@ -701,7 +755,15 @@ document.addEventListener('keydown', (event) => {
 document.addEventListener('pointermove', (event) => {
   if (dragState && event.pointerId === dragState.pointerId) {
     event.preventDefault();
-    updateDragPreview(event.clientX, event.clientY);
+    pendingDragPointer = { x: event.clientX, y: event.clientY };
+    if (dragMoveFrame === null) {
+      dragMoveFrame = requestAnimationFrame(() => {
+        dragMoveFrame = null;
+        if (!pendingDragPointer) return;
+        updateDragPreview(pendingDragPointer.x, pendingDragPointer.y);
+        pendingDragPointer = null;
+      });
+    }
   } else if (resizeState && event.pointerId === resizeState.pointerId) {
     event.preventDefault();
     updateResizePreview(event.clientX, event.clientY);
@@ -718,9 +780,7 @@ document.addEventListener('pointerup', (event) => {
 
 document.addEventListener('pointercancel', (event) => {
   if (dragState && event.pointerId === dragState.pointerId) {
-    dragState.previewEl?.remove();
-    dragState.sourceEl?.classList.remove('dragging');
-    document.body.classList.remove('is-dragging');
+    cleanupDragArtifacts();
     dragState = null;
     applyDragHoverIndicators();
   } else if (resizeState && event.pointerId === resizeState.pointerId) {
