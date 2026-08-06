@@ -2,11 +2,11 @@
 
 A lightweight TypeScript dashboard grid engine for draggable, resizable widgets.
 
-✨ Framework agnostic
-✨ Responsive
-✨ JSON layout persistence
-✨ TypeScript first
-✨ Drag & Resize
+- ✨ Framework agnostic
+- ✨ Responsive
+- ✨ JSON layout persistence
+- ✨ TypeScript first
+- ✨ Drag and resize
 
 ![Griddis Demo](https://raw.githubusercontent.com/thooom/griddis/main/assets/griddis_demo.gif)
 

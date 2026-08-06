@@ -317,8 +317,15 @@ export class Dashboard {
     const saved = await this.storage.load(key);
     if (!saved) return this.layout.getAll();
 
-    this.layout.fromJSON(saved);
-    this.relayoutWidgets();
+    const previous = this.layout.getAll();
+    try {
+      this.layout.fromJSON(saved);
+      this.relayoutWidgets();
+    } catch {
+      this.layout.setAll(previous);
+      return this.layout.getAll();
+    }
+
     this.eventBus.emit('layoutChanged', this.layout.getAll());
     return this.layout.getAll();
   }

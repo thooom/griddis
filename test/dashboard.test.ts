@@ -213,4 +213,47 @@ describe('Dashboard', () => {
     expect(a).toMatchObject({ id: 'a', x: 2, y: 1, w: 2, h: 1 });
     expect(b).toMatchObject({ id: 'b', x: 2, y: 0, w: 1, h: 1 });
   });
+
+  it('keeps previous layout when restore payload is malformed JSON', async () => {
+    const storage = {
+      async save() {},
+      async load(key: string) {
+        if (key === 'bad-layout') {
+          return '{ this is not valid json';
+        }
+        return null;
+      }
+    };
+
+    const dashboard = new Dashboard({ storage });
+    dashboard.addWidget({ id: 'existing', type: 'kpi', x: 0, y: 0, w: 1, h: 1 });
+
+    const restored = await dashboard.restoreLayout('bad-layout');
+    expect(restored.map((widget) => widget.id)).toEqual(['existing']);
+    expect(dashboard.getWidgets().map((widget) => widget.id)).toEqual(['existing']);
+  });
+
+  it('restores valid widgets and ignores invalid ones from persisted payload', async () => {
+    const storage = {
+      async save() {},
+      async load(key: string) {
+        if (key !== 'mixed-layout') {
+          return null;
+        }
+
+        return JSON.stringify([
+          { id: 'valid-a', type: 'kpi', x: 0, y: 0, w: 2, h: 1 },
+          { id: '', type: 'kpi', x: 0, y: 0, w: 1, h: 1 },
+          { id: 'bad-size', type: 'kpi', x: 0, y: 0, w: -2, h: 1 },
+          { id: 'valid-b', type: 'graph', x: 2, y: 0, w: 2, h: 2 }
+        ]);
+      }
+    };
+
+    const dashboard = new Dashboard({ columns: 6, storage });
+    const restored = await dashboard.restoreLayout('mixed-layout');
+
+    expect(restored.map((widget) => widget.id)).toEqual(['valid-a', 'valid-b']);
+    expect(restored.every((widget) => widget.w > 0 && widget.h > 0)).toBe(true);
+  });
 });

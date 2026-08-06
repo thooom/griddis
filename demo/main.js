@@ -44,6 +44,7 @@ let activeBreakpointKey = null;
 let responsiveApplyTimer = null;
 let dragMoveFrame = null;
 let pendingDragPointer = null;
+let hoverIndicatorState = { swapTargetIds: [], incompatibleTargetIds: [] };
 
 function notify(message) {
   if (!toastEl) return;
@@ -170,6 +171,23 @@ function nearestValid(value, sorted) {
   );
 }
 
+function nearestStep(current, sorted, direction) {
+  if (!sorted.length) return current;
+  const unique = [...new Set(sorted)].sort((a, b) => a - b);
+
+  if (direction > 0) {
+    return unique.find((value) => value > current) ?? current;
+  }
+
+  if (direction < 0) {
+    for (let i = unique.length - 1; i >= 0; i -= 1) {
+      if (unique[i] < current) return unique[i];
+    }
+  }
+
+  return current;
+}
+
 function startResize(cardEl, event, direction) {
   if (!editMode) return;
 
@@ -205,6 +223,7 @@ function startResize(cardEl, event, direction) {
     direction,
     sourceEl: cardEl,
     previewEl,
+    otherWidgets: dashboard.getWidgets().filter((item) => item.id !== id),
     pointerId: event.pointerId,
     currentW: widget.w,
     currentH: widget.h,
@@ -270,7 +289,7 @@ function updateResizePreview(clientX, clientY) {
   resizeState.currentY = newY;
 
   const candidate = { id: widget.id, x: newX, y: newY, w: newW, h: newH };
-  const others = dashboard.getWidgets().filter((item) => item.id !== widget.id);
+  const others = resizeState.otherWidgets ?? dashboard.getWidgets().filter((item) => item.id !== widget.id);
   const blocked = others.some((item) => collides(candidate, item));
 
   resizeState.isBlocked = blocked;
@@ -416,9 +435,9 @@ function updateDragHoverState(sourceWidget, x, y) {
   if (!dragState) return;
 
   const probe = { ...sourceWidget, x, y };
-  const overlaps = dashboard
+  const overlaps = (dragState.otherWidgets ?? dashboard
     .getWidgets()
-    .filter((widget) => widget.id !== sourceWidget.id)
+    .filter((widget) => widget.id !== sourceWidget.id))
     .filter((widget) => collides(probe, widget));
 
   const nextSwapTargetIds = [];
@@ -449,26 +468,51 @@ function updateDragHoverState(sourceWidget, x, y) {
 function applyDragHoverIndicators() {
   if (!boardEl) return;
 
-  for (const card of boardEl.querySelectorAll('.widget')) {
-    card.classList.remove('swap-target', 'swap-incompatible');
-  }
+  const nextSwapTargetIds = (dragState?.swapTargetIds ?? []).slice().sort();
+  const nextIncompatibleTargetIds = (dragState?.incompatibleTargetIds ?? []).slice().sort();
 
-  if (!dragState) {
-    document.body.classList.remove('is-swap-ready');
+  if (
+    sameIds(nextSwapTargetIds, hoverIndicatorState.swapTargetIds)
+    && sameIds(nextIncompatibleTargetIds, hoverIndicatorState.incompatibleTargetIds)
+  ) {
+    document.body.classList.toggle('is-swap-ready', nextSwapTargetIds.length > 0);
     return;
   }
 
-  for (const id of dragState.swapTargetIds ?? []) {
-    const target = boardEl.querySelector(`[data-id="${id}"]`);
-    target?.classList.add('swap-target');
+  for (const id of hoverIndicatorState.swapTargetIds) {
+    if (!nextSwapTargetIds.includes(id)) {
+      const card = queryWidgetCardById(id);
+      card?.classList.remove('swap-target');
+    }
   }
 
-  for (const id of dragState.incompatibleTargetIds ?? []) {
-    const target = boardEl.querySelector(`[data-id="${id}"]`);
-    target?.classList.add('swap-incompatible');
+  for (const id of hoverIndicatorState.incompatibleTargetIds) {
+    if (!nextIncompatibleTargetIds.includes(id)) {
+      const card = queryWidgetCardById(id);
+      card?.classList.remove('swap-incompatible');
+    }
   }
 
-  document.body.classList.toggle('is-swap-ready', (dragState.swapTargetIds ?? []).length > 0);
+  for (const id of nextSwapTargetIds) {
+    if (!hoverIndicatorState.swapTargetIds.includes(id)) {
+      const card = queryWidgetCardById(id);
+      card?.classList.add('swap-target');
+    }
+  }
+
+  for (const id of nextIncompatibleTargetIds) {
+    if (!hoverIndicatorState.incompatibleTargetIds.includes(id)) {
+      const card = queryWidgetCardById(id);
+      card?.classList.add('swap-incompatible');
+    }
+  }
+
+  hoverIndicatorState = {
+    swapTargetIds: nextSwapTargetIds,
+    incompatibleTargetIds: nextIncompatibleTargetIds
+  };
+
+  document.body.classList.toggle('is-swap-ready', nextSwapTargetIds.length > 0);
 }
 
 function endDrag() {
@@ -512,6 +556,7 @@ function startDrag(cardEl, event) {
     widget,
     sourceEl: cardEl,
     previewEl,
+    otherWidgets: dashboard.getWidgets().filter((item) => item.id !== id),
     pointerId: event.pointerId,
     dragOffsetX: event.clientX - rect.left,
     dragOffsetY: event.clientY - rect.top,
@@ -612,6 +657,71 @@ function graphPolyline(points) {
   return coords;
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function sanitizeToken(value, fallback = 'default') {
+  const token = String(value).trim().toLowerCase();
+  return /^[a-z0-9_-]+$/.test(token) ? token : fallback;
+}
+
+function queryWidgetCardById(id) {
+  if (!boardEl || !id) return null;
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return boardEl.querySelector(`[data-id="${CSS.escape(id)}"]`);
+  }
+  return boardEl.querySelector(`[data-id="${escapeHtml(id)}"]`);
+}
+
+function isInteractiveTarget(value) {
+  if (!(value instanceof Element)) return false;
+  return Boolean(value.closest('input, textarea, select, button, [contenteditable="true"]'));
+}
+
+function applyKeyboardMove(id, dx, dy) {
+  const widget = getWidgetById(id);
+  if (!widget) return;
+
+  try {
+    dashboard.moveWidget(widget.id, widget.x + dx, widget.y + dy);
+  } catch {
+    notify('Cannot move here');
+  }
+}
+
+function applyKeyboardResize(id, axis, direction) {
+  const widget = getWidgetById(id);
+  if (!widget) return;
+
+  const validSizes = dashboard.getValidSizesForType(widget.type);
+  if (!validSizes.length) return;
+
+  let newW = widget.w;
+  let newH = widget.h;
+
+  if (axis === 'w') {
+    const widths = validSizes.filter((size) => size.h === widget.h).map((size) => size.w);
+    newW = nearestStep(widget.w, widths, direction);
+  } else {
+    const heights = validSizes.filter((size) => size.w === widget.w).map((size) => size.h);
+    newH = nearestStep(widget.h, heights, direction);
+  }
+
+  if (newW === widget.w && newH === widget.h) return;
+
+  try {
+    dashboard.updateWidget({ ...widget, w: newW, h: newH });
+  } catch {
+    notify('Cannot resize here');
+  }
+}
+
 function widgetMarkup(widget) {
   if (widget.type === 'kpi') {
     const kpi = pickByWidget(widget, KPI_PRESETS);
@@ -619,8 +729,8 @@ function widgetMarkup(widget) {
     const trendText = `${kpi.delta >= 0 ? '+' : ''}${kpi.delta.toFixed(1)}%`;
     const spark = kpiSparkBars(hashKey(widget.id));
     return `<div class="widget-kpi">
-      <div class="kpi-label">${kpi.label}</div>
-      <div class="kpi-value">${kpi.value}</div>
+      <div class="kpi-label">${escapeHtml(kpi.label)}</div>
+      <div class="kpi-value">${escapeHtml(kpi.value)}</div>
       <div class="kpi-foot">
         <span class="kpi-trend ${trendClass}">${trendText}</span>
         <span class="kpi-period">vs last week</span>
@@ -633,11 +743,11 @@ function widgetMarkup(widget) {
     const graph = pickByWidget(widget, GRAPH_PRESETS);
     const points = graphPolyline(graph.points);
     const tone = graph.delta.startsWith('-') ? 'down' : 'up';
-    const xLabels = graph.labels.map((label) => `<span>${label}</span>`).join('');
+    const xLabels = graph.labels.map((label) => `<span>${escapeHtml(label)}</span>`).join('');
     return `<div class="widget-graph">
       <div class="graph-head">
-        <span class="graph-title">${graph.title}</span>
-        <span class="graph-delta ${tone}">${graph.delta}</span>
+        <span class="graph-title">${escapeHtml(graph.title)}</span>
+        <span class="graph-delta ${tone}">${escapeHtml(graph.delta)}</span>
       </div>
       <svg class="graph-chart" viewBox="0 0 240 90" preserveAspectRatio="none" aria-hidden="true">
         <defs>
@@ -657,14 +767,14 @@ function widgetMarkup(widget) {
     const rows = list.items
       .map(
         (item) => `<li class="checklist-row">
-          <span class="checklist-label">${item.label}</span>
-          <span class="checklist-state ${item.tone}">${item.status}</span>
+          <span class="checklist-label">${escapeHtml(item.label)}</span>
+          <span class="checklist-state ${sanitizeToken(item.tone, 'warn')}">${escapeHtml(item.status)}</span>
         </li>`
       )
       .join('');
     return `<div class="widget-checklist">
       <div class="checklist-head">
-        <span class="checklist-title">${list.title}</span>
+        <span class="checklist-title">${escapeHtml(list.title)}</span>
         <span class="checklist-count">${list.items.length} items</span>
       </div>
       <ul class="checklist-items">${rows}</ul>
@@ -689,63 +799,18 @@ function renderBoard() {
     .map((widget) => {
       const selectedClass = widget.id === selectedId ? ' selected' : '';
       const style = `grid-column:${widget.x + 1} / span ${widget.w}; grid-row:${widget.y + 1} / span ${widget.h};`;
-      const safeTitle = widget.type.toUpperCase();
-      return `<article class="widget ${selectedClass}" data-id="${widget.id}" style="${style}" title="${safeTitle}">
-        ${editMode ? `<button class="remove" data-remove="${widget.id}" aria-label="Remove widget">x</button>` : ''}
+      const safeTitle = escapeHtml(widget.type.toUpperCase());
+      const safeId = escapeHtml(widget.id);
+      return `<article class="widget ${selectedClass}" data-id="${safeId}" style="${style}" title="${safeTitle}" tabindex="${editMode ? '0' : '-1'}" role="group" aria-label="${safeTitle} widget ${safeId}">
+        ${editMode ? `<button class="remove" data-remove="${safeId}" aria-label="Remove widget">x</button>` : ''}
         ${widgetMarkup(widget)}
-        ${editMode ? `<div class="resize-handle resize-n" data-resize="${widget.id}" data-dir="n"></div>` : ''}
-        ${editMode ? `<div class="resize-handle resize-e" data-resize="${widget.id}" data-dir="e"></div>` : ''}
-        ${editMode ? `<div class="resize-handle resize-s" data-resize="${widget.id}" data-dir="s"></div>` : ''}
-        ${editMode ? `<div class="resize-handle resize-w" data-resize="${widget.id}" data-dir="w"></div>` : ''}
+        ${editMode ? `<button type="button" class="resize-handle resize-n" data-resize="${safeId}" data-dir="n" aria-label="Resize ${safeTitle} widget north"></button>` : ''}
+        ${editMode ? `<button type="button" class="resize-handle resize-e" data-resize="${safeId}" data-dir="e" aria-label="Resize ${safeTitle} widget east"></button>` : ''}
+        ${editMode ? `<button type="button" class="resize-handle resize-s" data-resize="${safeId}" data-dir="s" aria-label="Resize ${safeTitle} widget south"></button>` : ''}
+        ${editMode ? `<button type="button" class="resize-handle resize-w" data-resize="${safeId}" data-dir="w" aria-label="Resize ${safeTitle} widget west"></button>` : ''}
       </article>`;
     })
     .join('');
-
-  for (const card of boardEl.querySelectorAll('.widget')) {
-    card.addEventListener('click', (event) => {
-      const removeButton = event.target.closest('[data-remove]');
-      if (removeButton) return;
-      if (!editMode) return;
-      const id = card.getAttribute('data-id');
-      if (id) setSelected(id);
-    });
-
-    card.addEventListener('pointerdown', (event) => {
-      if (!editMode) return;
-      const removeButton = event.target.closest('[data-remove]');
-      const resizeHandle = event.target.closest('.resize-handle');
-      if (removeButton || resizeHandle || event.button !== 0) return;
-      event.preventDefault();
-      setSelected(card.getAttribute('data-id'), { render: false });
-      startDrag(card, event);
-    });
-  }
-
-  for (const removeButton of boardEl.querySelectorAll('[data-remove]')) {
-    removeButton.addEventListener('click', (event) => {
-      event.stopPropagation();
-      if (!editMode) return;
-      const id = removeButton.getAttribute('data-remove');
-      if (!id) return;
-      dashboard.removeWidget(id);
-      if (selectedId === id) setSelected(null);
-      notify(`Removed ${id}`);
-    });
-  }
-
-  for (const handle of boardEl.querySelectorAll('.resize-handle')) {
-    handle.addEventListener('pointerdown', (event) => {
-      if (!editMode) return;
-      if (event.button !== 0) return;
-      const id = handle.getAttribute('data-resize');
-      const dir = handle.getAttribute('data-dir');
-      const card = id ? boardEl.querySelector(`[data-id="${id}"]`) : null;
-      if (card && dir) {
-        setSelected(id, { render: false });
-        startResize(card, event, dir);
-      }
-    });
-  }
 }
 
 function renderWidgetList() {
@@ -756,7 +821,7 @@ function renderWidgetList() {
   widgetListEl.innerHTML = templates
     .map(
       (template) =>
-        `<button class="widget-row" data-add="${template.id}"><span>${template.label ?? template.id}</span><span class="widget-size">${template.w}x${template.h}</span></button>`
+        `<button class="widget-row" data-add="${escapeHtml(template.id)}"><span>${escapeHtml(template.label ?? template.id)}</span><span class="widget-size">${template.w}x${template.h}</span></button>`
     )
     .join('');
 
@@ -796,10 +861,10 @@ function seedLayout() {
   }
 
   const initial = [
-    { templateId: 'kpi-1x2', x: 0, y: 0 },
+    { templateId: 'kpi-2x2', x: 0, y: 0 },
     { templateId: 'graph-2x2', x: 0, y: 2 },
     { templateId: 'list-4x2', x: 4, y: 0 },
-    { templateId: 'kpi-1x1', x: 9, y: 0 }
+    { templateId: 'kpi-2x3', x: 9, y: 0 }
   ];
 
   for (const item of initial) {
@@ -864,9 +929,60 @@ resetBtn?.addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', (event) => {
+  if (isInteractiveTarget(event.target)) {
+    if (event.key === 'Escape') {
+      panelEl?.classList.add('hidden');
+    }
+    return;
+  }
+
   if (event.key === 'Escape') {
     panelEl?.classList.add('hidden');
+    return;
   }
+
+  if (!editMode || !selectedId || dragState || resizeState) {
+    return;
+  }
+
+  if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+    return;
+  }
+
+  event.preventDefault();
+
+  if (event.shiftKey) {
+    if (event.key === 'ArrowRight') {
+      applyKeyboardResize(selectedId, 'w', 1);
+      return;
+    }
+    if (event.key === 'ArrowLeft') {
+      applyKeyboardResize(selectedId, 'w', -1);
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      applyKeyboardResize(selectedId, 'h', 1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      applyKeyboardResize(selectedId, 'h', -1);
+      return;
+    }
+  }
+
+  if (event.key === 'ArrowRight') {
+    applyKeyboardMove(selectedId, 1, 0);
+    return;
+  }
+  if (event.key === 'ArrowLeft') {
+    applyKeyboardMove(selectedId, -1, 0);
+    return;
+  }
+  if (event.key === 'ArrowDown') {
+    applyKeyboardMove(selectedId, 0, 1);
+    return;
+  }
+  applyKeyboardMove(selectedId, 0, -1);
 });
 
 document.addEventListener('pointermove', (event) => {
@@ -902,11 +1018,75 @@ document.addEventListener('pointercancel', (event) => {
     applyDragHoverIndicators();
   } else if (resizeState && event.pointerId === resizeState.pointerId) {
     resizeState.previewEl?.remove();
-    resizeState.sourceEl?.classList.remove('dragging');
+    resizeState.sourceEl?.classList.remove('dragging', 'resize-blocked');
     document.body.classList.remove('is-resizing');
     resizeState = null;
   }
 }, true);
+
+boardEl?.addEventListener('click', (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+
+  const removeButton = target.closest('[data-remove]');
+  if (removeButton) {
+    event.stopPropagation();
+    if (!editMode) return;
+    const id = removeButton.getAttribute('data-remove');
+    if (!id) return;
+    dashboard.removeWidget(id);
+    if (selectedId === id) setSelected(null);
+    notify(`Removed ${id}`);
+    return;
+  }
+
+  const card = target.closest('.widget');
+  if (!card || !editMode) return;
+  const id = card.getAttribute('data-id');
+  if (id) setSelected(id);
+});
+
+boardEl?.addEventListener('keydown', (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+
+  const card = target.closest('.widget');
+  if (!card || !editMode) return;
+
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  const id = card.getAttribute('data-id');
+  if (id) setSelected(id);
+});
+
+boardEl?.addEventListener('pointerdown', (event) => {
+  if (!editMode || event.button !== 0) return;
+
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+
+  if (target.closest('[data-remove]')) {
+    return;
+  }
+
+  const resizeHandle = target.closest('.resize-handle');
+  if (resizeHandle) {
+    const id = resizeHandle.getAttribute('data-resize');
+    const dir = resizeHandle.getAttribute('data-dir');
+    const card = queryWidgetCardById(id);
+    if (card && dir) {
+      setSelected(id, { render: false });
+      startResize(card, event, dir);
+    }
+    return;
+  }
+
+  const card = target.closest('.widget');
+  if (!card) return;
+  event.preventDefault();
+  setSelected(card.getAttribute('data-id'), { render: false });
+  startDrag(card, event);
+});
 
 window.addEventListener('resize', scheduleResponsiveColumns);
 
