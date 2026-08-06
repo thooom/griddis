@@ -1,8 +1,14 @@
-# griddis
+# Griddis
 
-A modern, framework-agnostic TypeScript dashboard layout engine with draggable and resizable grid widgets for React, Vue, Svelte, Angular, and vanilla web apps.
+A lightweight TypeScript dashboard grid engine for draggable, resizable widgets.
 
-This repository includes a tactile, ANTP-inspired demo board (wood background, floating cards, add-widget panel) so the package and its intended UX direction are visible together. Widgets are moved with drag and drop rather than directional move buttons.
+✨ Framework agnostic
+✨ Responsive
+✨ JSON layout persistence
+✨ TypeScript first
+✨ Drag & Resize
+
+![Griddis Demo](https://raw.githubusercontent.com/thooom/griddis/main/assets/griddis_demo.gif)
 
 ## Features
 
@@ -64,6 +70,143 @@ dashboard.setSwapEnabled(false);
 The consuming project decides which templates exist and what each size/type means.
 For example: 1x1, 1x2, and 1x3 as KPI tiles; 2x2 and 2x3 as graphs; 4x2 as lists.
 The package only enforces layout behavior and sizing.
+
+## Core API Reference
+
+This section lists the public functions on Dashboard and what each one is for.
+
+### Constructor and Options
+
+- new Dashboard(options): Creates a dashboard instance.
+- options.columns: Grid column count (default 12).
+- options.rows: Optional max row count.
+- options.swapEnabled: Enables same-size swap on drag collisions (default true).
+- options.widgetTemplates: Initial template catalog.
+- options.storage: Optional custom storage adapter.
+- options.eventBus: Optional custom event bus.
+
+### Plugin API
+
+- registerPlugin(type, initialize): Registers type-specific widget initialization logic.
+
+### Template and Size APIs
+
+- setWidgetTemplates(templates): Replaces all templates.
+- registerWidgetTemplate(template): Adds or updates one template.
+- getWidgetTemplates(): Returns all registered templates.
+- getValidSizesForType(type): Returns allowed w/h pairs for a widget type.
+- addWidgetFromTemplate(templateId, options): Creates a widget using a registered template.
+
+### Widget and Layout APIs
+
+- addWidget(widget): Adds a fully-defined widget.
+- updateWidget(widget): Updates one widget and resolves collisions.
+- moveWidget(id, x, y): Moves a widget to a target position.
+- resizeWidget(id, w, h): Resizes a widget to a target size.
+- removeWidget(id): Removes a widget.
+- getWidgets(): Returns all widgets.
+- setLayout(widgets): Replaces current layout with a full layout snapshot.
+- clearLayout(): Clears all widgets.
+- applyDefaultLayout(widgets, options): Applies a default layout; can be conditional.
+
+### Grid and Responsive APIs
+
+- setColumns(columns): Changes column count and reflows layout.
+- setRows(rows): Changes optional row bound and reflows layout.
+- setDimensions({ columns, rows }): Updates both columns and rows.
+- getDimensions(): Returns current grid dimensions.
+- applyResponsiveDimensions(width, breakpoints): Selects and applies a breakpoint rule.
+
+### Swap APIs
+
+- setSwapEnabled(enabled): Enables or disables same-size swap behavior at runtime.
+- isSwapEnabled(): Reads current swap setting.
+
+### Events API
+
+- on(event, handler): Subscribes to widgetAdded, widgetUpdated, widgetRemoved, or layoutChanged. Returns an unsubscribe function.
+
+### Persistence APIs
+
+- saveLayout(key): Saves current layout by key.
+- restoreLayout(key): Restores layout by key.
+- saveScopedLayout(scope): Saves using a structured scope and returns resolved key.
+- restoreScopedLayout(scope): Restores using a structured scope.
+- hasScopedLayout(scope): Checks whether scoped layout exists.
+- restoreScopedLayoutOrDefault(scope, defaultWidgets): Restores saved layout or applies default.
+
+## Interaction Patterns
+
+### Edit Mode Toggle
+
+Dashboard is headless and does not include built-in edit mode state.
+Use app-level state to gate interactions in your UI. In the demo app, edit mode controls whether add/remove/drag/resize actions are enabled.
+
+### Add Widgets
+
+Use template-based adds when you want strict size/type control:
+
+```ts
+dashboard.addWidgetFromTemplate('graph-2x2', {
+  id: 'sales-graph',
+  x: 0,
+  y: 0
+});
+```
+
+Use addWidget when your app already has a fully composed widget object.
+
+### Move Widgets and Swap
+
+Use moveWidget for drag-and-drop updates:
+
+```ts
+dashboard.moveWidget('sales-graph', 3, 1);
+```
+
+If swap is enabled, moving onto exactly one overlapping widget of the same size will swap positions.
+If swap is disabled or incompatible, normal collision resolution is applied.
+
+```ts
+dashboard.setSwapEnabled(true);
+const swapEnabled = dashboard.isSwapEnabled();
+```
+
+### Resize Widgets
+
+Use resizeWidget for programmatic size updates:
+
+```ts
+dashboard.resizeWidget('sales-graph', 3, 2);
+```
+
+If the new size collides or violates bounds, collision handling/normalization applies through update logic.
+
+### Lock Resizing to Predetermined Sizes
+
+There are two common layers:
+
+1. Template policy: Register only allowed sizes for each type.
+2. UI snapping policy: During resize drag, snap attempted size to nearest allowed size from getValidSizesForType(type).
+
+Example allowed templates:
+
+```ts
+dashboard.setWidgetTemplates([
+  { id: 'kpi-2x2', type: 'kpi', w: 2, h: 2 },
+  { id: 'kpi-2x3', type: 'kpi', w: 2, h: 3 },
+  { id: 'kpi-2x4', type: 'kpi', w: 2, h: 4 }
+]);
+```
+
+Example resize snapping lookup:
+
+```ts
+const validSizes = dashboard.getValidSizesForType('kpi');
+// validSizes => [{ w: 2, h: 2 }, { w: 2, h: 3 }, { w: 2, h: 4 }]
+```
+
+The included demo implements this approach when handling pointer resize events.
 
 ## User Guide
 
@@ -302,10 +445,12 @@ npm run build
 
 A local consumer app lives in `demo/` so you can test the package as an npm dependency during development.
 
-The demo is intentionally styled to resemble a tactile browser start-page dashboard and exercises package APIs through UI actions:
+The demo is intentionally styled as a modern dashboard and exercises package APIs through UI actions:
 
+- Toggle edit mode on/off to control whether layout editing is allowed
 - Add and remove widgets
-- Drag and resize selected widgets
+- Drag and move selected widgets
+- Resize selected widgets
 - Same-size swap candidate feedback (green), incompatible overlap feedback (red), and swap cursor hints during drag
 - Ghost drag origin and live drag preview while moving widgets
 - Resize overlap blocking with red invalid feedback when a resize would collide

@@ -16,19 +16,15 @@ const restoreBtn = document.querySelector('#restore');
 const resetBtn = document.querySelector('#reset');
 
 const projectWidgetTemplates = [
-  { id: 'kpi-1x1', type: 'kpi', label: 'KPI 1×1', w: 1, h: 1 },
-  { id: 'kpi-1x2', type: 'kpi', label: 'KPI 1×2', w: 1, h: 2 },
-  { id: 'kpi-1x3', type: 'kpi', label: 'KPI 1×3', w: 1, h: 3 },
-  { id: 'kpi-2x1', type: 'kpi', label: 'KPI 2×1', w: 2, h: 1 },
+  { id: 'kpi-2x4', type: 'kpi', label: 'KPI 1×2', w: 2, h: 4 },
+  { id: 'kpi-2x3', type: 'kpi', label: 'KPI 1×3', w: 2, h: 3 },
   { id: 'kpi-2x2', type: 'kpi', label: 'KPI 2×2', w: 2, h: 2 },
-  { id: 'kpi-3x1', type: 'kpi', label: 'KPI 3×1', w: 3, h: 1 },
   { id: 'graph-2x2', type: 'graph', label: 'Graph 2×2', w: 2, h: 2 },
   { id: 'graph-2x3', type: 'graph', label: 'Graph 2×3', w: 2, h: 3 },
   { id: 'graph-3x2', type: 'graph', label: 'Graph 3×2', w: 3, h: 2 },
   { id: 'graph-3x3', type: 'graph', label: 'Graph 3×3', w: 3, h: 3 },
   { id: 'list-4x2', type: 'list', label: 'List 4×2', w: 4, h: 2 },
-  { id: 'list-4x3', type: 'list', label: 'List 4×3', w: 4, h: 3 },
-  { id: 'hero-4x6', type: 'hero', label: 'Hero 4×6', w: 4, h: 6 }
+  { id: 'list-4x3', type: 'list', label: 'List 4×3', w: 4, h: 3 }
 ];
 
 const RESPONSIVE_LAYOUTS = [
@@ -529,32 +525,154 @@ function startDrag(cardEl, event) {
   cardEl.setPointerCapture(event.pointerId);
 }
 
+const KPI_PRESETS = [
+  { label: 'Active users', value: '12.4k', delta: 4.2 },
+  { label: 'Conversion', value: '3.8%', delta: 0.9 },
+  { label: 'Avg. order', value: '$74.20', delta: -1.4 },
+  { label: 'MRR', value: '$128k', delta: 6.1 },
+  { label: 'Churn', value: '1.7%', delta: -0.5 }
+];
+
+const GRAPH_PRESETS = [
+  {
+    title: 'Revenue trend',
+    delta: '+12.4%',
+    points: [28, 34, 31, 46, 52, 49, 58],
+    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  },
+  {
+    title: 'Orders trend',
+    delta: '+6.8%',
+    points: [16, 24, 22, 26, 33, 29, 37],
+    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  },
+  {
+    title: 'Sessions trend',
+    delta: '-2.1%',
+    points: [44, 41, 39, 36, 40, 38, 35],
+    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  }
+];
+
+const LIST_PRESETS = [
+  {
+    title: 'Today',
+    items: [
+      { label: 'Review partner leads', status: 'In progress', tone: 'warn' },
+      { label: 'Ship KPI export', status: 'Done', tone: 'ok' },
+      { label: 'Finalize Q3 goals', status: 'Blocked', tone: 'bad' }
+    ]
+  },
+  {
+    title: 'Backlog',
+    items: [
+      { label: 'Design retention report', status: 'Open', tone: 'warn' },
+      { label: 'Migrate auth hooks', status: 'Open', tone: 'warn' },
+      { label: 'Clean stale accounts', status: 'Done', tone: 'ok' }
+    ]
+  }
+];
+
+function hashKey(value) {
+  let acc = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    acc = (acc * 31 + value.charCodeAt(i)) % 2147483647;
+  }
+  return acc;
+}
+
+function pickByWidget(widget, list) {
+  return list[hashKey(`${widget.id}:${widget.type}:${widget.w}x${widget.h}`) % list.length];
+}
+
+function kpiSparkBars(seed) {
+  const bars = [];
+  for (let i = 0; i < 9; i += 1) {
+    const height = 28 + ((seed + i * 17) % 56);
+    bars.push(`<span class="kpi-bar" style="height:${height}%"></span>`);
+  }
+  return bars.join('');
+}
+
+function graphPolyline(points) {
+  const w = 240;
+  const h = 90;
+  const pad = 8;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const span = Math.max(1, max - min);
+  const step = (w - pad * 2) / Math.max(1, points.length - 1);
+  const coords = points
+    .map((point, i) => {
+      const x = pad + i * step;
+      const y = h - pad - ((point - min) / span) * (h - pad * 2);
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(' ');
+  return coords;
+}
+
 function widgetMarkup(widget) {
   if (widget.type === 'kpi') {
-    return '<div class="widget-orb"><div class="orb"></div><div class="hold">HOLD</div></div>';
+    const kpi = pickByWidget(widget, KPI_PRESETS);
+    const trendClass = kpi.delta >= 0 ? 'up' : 'down';
+    const trendText = `${kpi.delta >= 0 ? '+' : ''}${kpi.delta.toFixed(1)}%`;
+    const spark = kpiSparkBars(hashKey(widget.id));
+    return `<div class="widget-kpi">
+      <div class="kpi-label">${kpi.label}</div>
+      <div class="kpi-value">${kpi.value}</div>
+      <div class="kpi-foot">
+        <span class="kpi-trend ${trendClass}">${trendText}</span>
+        <span class="kpi-period">vs last week</span>
+      </div>
+      <div class="kpi-spark">${spark}</div>
+    </div>`;
   }
 
   if (widget.type === 'graph') {
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-    const period = now.getHours() >= 12 ? 'PM' : 'AM';
-    return `<div class="widget-clock"><div class="clock">${hh}:${mm} <small>${period}</small></div></div>`;
+    const graph = pickByWidget(widget, GRAPH_PRESETS);
+    const points = graphPolyline(graph.points);
+    const tone = graph.delta.startsWith('-') ? 'down' : 'up';
+    const xLabels = graph.labels.map((label) => `<span>${label}</span>`).join('');
+    return `<div class="widget-graph">
+      <div class="graph-head">
+        <span class="graph-title">${graph.title}</span>
+        <span class="graph-delta ${tone}">${graph.delta}</span>
+      </div>
+      <svg class="graph-chart" viewBox="0 0 240 90" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="graphFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="rgba(79, 128, 255, 0.38)" />
+            <stop offset="100%" stop-color="rgba(79, 128, 255, 0.04)" />
+          </linearGradient>
+        </defs>
+        <polyline class="graph-line" points="${points}" />
+      </svg>
+      <div class="graph-axis">${xLabels}</div>
+    </div>`;
   }
 
   if (widget.type === 'list') {
-    const now = new Date();
-    const weekday = now.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase();
-    const month = now.toLocaleDateString(undefined, { month: 'short' }).toUpperCase();
-    return `<div class="widget-date"><div class="weekday">${weekday}</div><div class="day">${now.getDate()}</div><div class="month">${month}</div></div>`;
+    const list = pickByWidget(widget, LIST_PRESETS);
+    const rows = list.items
+      .map(
+        (item) => `<li class="checklist-row">
+          <span class="checklist-label">${item.label}</span>
+          <span class="checklist-state ${item.tone}">${item.status}</span>
+        </li>`
+      )
+      .join('');
+    return `<div class="widget-checklist">
+      <div class="checklist-head">
+        <span class="checklist-title">${list.title}</span>
+        <span class="checklist-count">${list.items.length} items</span>
+      </div>
+      <ul class="checklist-items">${rows}</ul>
+    </div>`;
   }
 
   if (widget.type === 'clock') {
     return '<div class="widget-dice"><div class="dice-grid"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div></div>';
-  }
-
-  if (widget.type === 'hero') {
-    return '<div class="widget-tarot"><div class="tarot-card"><div class="tarot-body">✶</div><div class="tarot-title">PAGE OF CUPS</div></div></div>';
   }
 
   return '<div>Widget</div>';
@@ -681,8 +799,7 @@ function seedLayout() {
     { templateId: 'kpi-1x2', x: 0, y: 0 },
     { templateId: 'graph-2x2', x: 0, y: 2 },
     { templateId: 'list-4x2', x: 4, y: 0 },
-    { templateId: 'kpi-1x1', x: 9, y: 0 },
-    { templateId: 'hero-4x6', x: 8, y: 2 }
+    { templateId: 'kpi-1x1', x: 9, y: 0 }
   ];
 
   for (const item of initial) {

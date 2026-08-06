@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.4] - 2026-08-06
+
+### Added
+- Added realistic demo content for KPI, graph, and list widgets.
+- Added expanded README API coverage for dashboard operations, interaction patterns, responsive layouts, and resize-size constraints.
+
+### Changed
+- Changed demo visual theme from wood-toned background to a modern cool-toned gradient style.
+- Removed Hero widget from demo templates, seed layout, and related styles.
+- Updated README demo media reference to the current GIF asset.
+
 ## [0.3.3] - 2026-08-06
 
 ### Added
