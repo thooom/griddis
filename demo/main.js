@@ -1,9 +1,15 @@
-import { Dashboard } from 'griddis';
+import { Dashboard, deriveLayoutForBreakpoint } from 'griddis';
 
 const sceneEl = document.querySelector('.scene');
 const boardEl = document.querySelector('#board');
 const panelEl = document.querySelector('#panel');
-const widgetListEl = document.querySelector('#widget-list');
+const widgetTypeListEl = document.querySelector('#widget-type-list');
+const widgetSizeListEl = document.querySelector('#widget-size-list');
+const panelTitleEl = document.querySelector('#panel-title');
+const wizardStep1El = document.querySelector('#wizard-step-1');
+const wizardStep2El = document.querySelector('#wizard-step-2');
+const wizardSizeHintEl = document.querySelector('#wizard-size-hint');
+const wizardBackBtn = document.querySelector('#wizard-back');
 const selectedEl = document.querySelector('#selected');
 const toastEl = document.querySelector('#toast');
 
@@ -11,20 +17,112 @@ const fullWidthToggleBtn = document.querySelector('#full-width-toggle');
 const editModeBtn = document.querySelector('#edit-mode');
 const openPanelBtn = document.querySelector('#open-panel');
 const closePanelBtn = document.querySelector('#close-panel');
-const saveBtn = document.querySelector('#save');
-const restoreBtn = document.querySelector('#restore');
 const resetBtn = document.querySelector('#reset');
+const layoutSharedEl = document.querySelector('#layout-shared');
+const layoutPickerEl = document.querySelector('#layout-picker');
+const layoutStatusEl = document.querySelector('#layout-status');
+const saveCurrentLayoutBtn = document.querySelector('#save-current-layout');
+const saveLayoutBtn = document.querySelector('#save-layout');
+const renameLayoutBtn = document.querySelector('#rename-layout');
+const deleteLayoutBtn = document.querySelector('#delete-layout');
+const editPanelEl = document.querySelector('#edit-panel');
+const closeEditPanelBtn = document.querySelector('#close-edit-panel');
+
+const LAYOUT_LIBRARY_KEY = 'griddis-demo-layout-library-v1';
+const CURRENT_USER_KEY = 'griddis-demo-current-user-v1';
+const CURRENT_USER_DEFAULT = 'user-1';
+const CUSTOM_LAYOUT_ACCESS_DEFAULT = 'personal';
+
+function getCurrentUserId() {
+  return localStorage.getItem(CURRENT_USER_KEY) ?? CURRENT_USER_DEFAULT;
+}
+
+function setCurrentUserId(userId) {
+  localStorage.setItem(CURRENT_USER_KEY, userId);
+}
 
 const projectWidgetTemplates = [
-  { id: 'kpi-2x4', type: 'kpi', label: 'KPI 1×2', w: 2, h: 4 },
-  { id: 'kpi-2x3', type: 'kpi', label: 'KPI 1×3', w: 2, h: 3 },
-  { id: 'kpi-2x2', type: 'kpi', label: 'KPI 2×2', w: 2, h: 2 },
-  { id: 'graph-2x2', type: 'graph', label: 'Graph 2×2', w: 2, h: 2 },
-  { id: 'graph-2x3', type: 'graph', label: 'Graph 2×3', w: 2, h: 3 },
-  { id: 'graph-3x2', type: 'graph', label: 'Graph 3×2', w: 3, h: 2 },
-  { id: 'graph-3x3', type: 'graph', label: 'Graph 3×3', w: 3, h: 3 },
-  { id: 'list-4x2', type: 'list', label: 'List 4×2', w: 4, h: 2 },
-  { id: 'list-4x3', type: 'list', label: 'List 4×3', w: 4, h: 3 }
+  {
+    id: 'kpi-2x4', type: 'kpi', label: 'KPI', w: 2, h: 4,
+    breakpointSizes: {
+      ultraWide: [{ w: 2, h: 4 }, { w: 2, h: 3 }, { w: 2, h: 2 }],
+      desktop:   [{ w: 2, h: 4 }, { w: 2, h: 3 }, { w: 2, h: 2 }],
+      tablet:    [{ w: 3, h: 3 }, { w: 3, h: 2 }, { w: 2, h: 2 }],
+      mobile:    [{ w: 3, h: 2 }, { w: 3, h: 1 }]
+    }
+  },
+  {
+    id: 'kpi-2x3', type: 'kpi', label: 'KPI', w: 2, h: 3,
+    breakpointSizes: {
+      ultraWide: [{ w: 2, h: 4 }, { w: 2, h: 3 }, { w: 2, h: 2 }],
+      desktop:   [{ w: 2, h: 4 }, { w: 2, h: 3 }, { w: 2, h: 2 }],
+      tablet:    [{ w: 3, h: 3 }, { w: 3, h: 2 }, { w: 2, h: 2 }],
+      mobile:    [{ w: 3, h: 2 }, { w: 3, h: 1 }]
+    }
+  },
+  {
+    id: 'kpi-2x2', type: 'kpi', label: 'KPI', w: 2, h: 2,
+    breakpointSizes: {
+      ultraWide: [{ w: 2, h: 4 }, { w: 2, h: 3 }, { w: 2, h: 2 }],
+      desktop:   [{ w: 2, h: 4 }, { w: 2, h: 3 }, { w: 2, h: 2 }],
+      tablet:    [{ w: 3, h: 3 }, { w: 3, h: 2 }, { w: 2, h: 2 }],
+      mobile:    [{ w: 3, h: 2 }, { w: 3, h: 1 }]
+    }
+  },
+  {
+    id: 'graph-2x2', type: 'graph', label: 'Graph', w: 2, h: 2,
+    breakpointSizes: {
+      ultraWide: [{ w: 5, h: 3 }, { w: 4, h: 3 }, { w: 3, h: 3 }, { w: 3, h: 2 }, { w: 2, h: 2 }],
+      desktop:   [{ w: 5, h: 3 }, { w: 4, h: 3 }, { w: 3, h: 3 }, { w: 3, h: 2 }, { w: 2, h: 2 }],
+      tablet:    [{ w: 6, h: 3 }, { w: 6, h: 2 }, { w: 4, h: 3 }, { w: 3, h: 2 }],
+      mobile:    [{ w: 3, h: 3 }, { w: 3, h: 2 }]
+    }
+  },
+  {
+    id: 'graph-2x3', type: 'graph', label: 'Graph', w: 2, h: 3,
+    breakpointSizes: {
+      ultraWide: [{ w: 5, h: 3 }, { w: 4, h: 3 }, { w: 3, h: 3 }, { w: 3, h: 2 }, { w: 2, h: 2 }],
+      desktop:   [{ w: 5, h: 3 }, { w: 4, h: 3 }, { w: 3, h: 3 }, { w: 3, h: 2 }, { w: 2, h: 2 }],
+      tablet:    [{ w: 6, h: 3 }, { w: 6, h: 2 }, { w: 4, h: 3 }, { w: 3, h: 2 }],
+      mobile:    [{ w: 3, h: 3 }, { w: 3, h: 2 }]
+    }
+  },
+  {
+    id: 'graph-3x2', type: 'graph', label: 'Graph', w: 3, h: 2,
+    breakpointSizes: {
+      ultraWide: [{ w: 5, h: 3 }, { w: 4, h: 3 }, { w: 3, h: 3 }, { w: 3, h: 2 }, { w: 2, h: 2 }],
+      desktop:   [{ w: 5, h: 3 }, { w: 4, h: 3 }, { w: 3, h: 3 }, { w: 3, h: 2 }, { w: 2, h: 2 }],
+      tablet:    [{ w: 6, h: 3 }, { w: 6, h: 2 }, { w: 4, h: 3 }, { w: 3, h: 2 }],
+      mobile:    [{ w: 3, h: 3 }, { w: 3, h: 2 }]
+    }
+  },
+  {
+    id: 'graph-3x3', type: 'graph', label: 'Graph', w: 3, h: 3,
+    breakpointSizes: {
+      ultraWide: [{ w: 5, h: 3 }, { w: 4, h: 3 }, { w: 3, h: 3 }, { w: 3, h: 2 }, { w: 2, h: 2 }],
+      desktop:   [{ w: 5, h: 3 }, { w: 4, h: 3 }, { w: 3, h: 3 }, { w: 3, h: 2 }, { w: 2, h: 2 }],
+      tablet:    [{ w: 6, h: 3 }, { w: 6, h: 2 }, { w: 4, h: 3 }, { w: 3, h: 2 }],
+      mobile:    [{ w: 3, h: 3 }, { w: 3, h: 2 }]
+    }
+  },
+  {
+    id: 'list-4x2', type: 'list', label: 'List', w: 4, h: 2,
+    breakpointSizes: {
+      ultraWide: [{ w: 4, h: 3 }, { w: 4, h: 2 }],
+      desktop:   [{ w: 4, h: 3 }, { w: 4, h: 2 }],
+      tablet:    [{ w: 6, h: 2 }, { w: 4, h: 2 }],
+      mobile:    [{ w: 3, h: 3 }, { w: 3, h: 2 }]
+    }
+  },
+  {
+    id: 'list-4x3', type: 'list', label: 'List', w: 4, h: 3,
+    breakpointSizes: {
+      ultraWide: [{ w: 4, h: 3 }, { w: 4, h: 2 }],
+      desktop:   [{ w: 4, h: 3 }, { w: 4, h: 2 }],
+      tablet:    [{ w: 6, h: 2 }, { w: 4, h: 2 }],
+      mobile:    [{ w: 3, h: 3 }, { w: 3, h: 2 }]
+    }
+  }
 ];
 
 const RESPONSIVE_LAYOUTS = [
@@ -34,7 +132,12 @@ const RESPONSIVE_LAYOUTS = [
   { key: 'mobile', minWidth: 0, columns: 3 }
 ];
 
-const dashboard = new Dashboard({ columns: 12, rows: 10, widgetTemplates: projectWidgetTemplates });
+const dashboard = new Dashboard({
+  columns: 12,
+  rows: 10,
+  widgetTemplates: projectWidgetTemplates,
+  customLayoutAccess: CUSTOM_LAYOUT_ACCESS_DEFAULT
+});
 let selectedId = null;
 let dragState = null;
 let resizeState = null;
@@ -45,6 +148,8 @@ let responsiveApplyTimer = null;
 let dragMoveFrame = null;
 let pendingDragPointer = null;
 let hoverIndicatorState = { swapTargetIds: [], incompatibleTargetIds: [] };
+let activeNamedLayoutKey = '';
+let sharedScopeOverride = null;
 
 function notify(message) {
   if (!toastEl) return;
@@ -55,15 +160,12 @@ function notify(message) {
 
 function updateEditModeUI() {
   if (editModeBtn) {
-    editModeBtn.textContent = editMode ? 'Edit mode: on' : 'Edit mode: off';
+    editModeBtn.textContent = editMode ? 'Editing' : 'Edit';
+    editModeBtn.classList.toggle('is-editing', editMode);
   }
 
-  if (openPanelBtn) {
-    openPanelBtn.disabled = !editMode;
-  }
-
-  if (resetBtn) {
-    resetBtn.disabled = !editMode;
+  if (editPanelEl) {
+    editPanelEl.classList.toggle('is-open', editMode);
   }
 
   if (!editMode) {
@@ -80,6 +182,7 @@ function updateEditModeUI() {
     document.body.classList.remove('is-dragging', 'is-resizing');
   }
 
+  updateNamedLayoutState();
   renderBoard();
 }
 
@@ -105,6 +208,8 @@ function updateWidthModeUI() {
   if (sceneEl) {
     sceneEl.classList.toggle('is-constrained', !fullWidthMode);
   }
+
+  scheduleResponsiveColumns();
 }
 
 function setSelected(id, options = {}) {
@@ -126,8 +231,21 @@ function getTemplateById(id) {
   return dashboard.getWidgetTemplates().find((template) => template.id === id) ?? null;
 }
 
+function getResponsiveViewportWidth() {
+  const boardShellEl = boardEl?.closest('.board-shell');
+  if (boardShellEl instanceof HTMLElement) {
+    return boardShellEl.clientWidth;
+  }
+
+  if (sceneEl instanceof HTMLElement) {
+    return sceneEl.clientWidth;
+  }
+
+  return window.innerWidth;
+}
+
 function getResponsiveLayout() {
-  const width = window.innerWidth;
+  const width = getResponsiveViewportWidth();
   return RESPONSIVE_LAYOUTS.find((layout) => width >= layout.minWidth) ?? RESPONSIVE_LAYOUTS[RESPONSIVE_LAYOUTS.length - 1];
 }
 
@@ -135,14 +253,448 @@ function getLayoutStorageKey(breakpointKey) {
   return `demo-layout:${breakpointKey}`;
 }
 
+function getCurrentBreakpointKey() {
+  // Use the live viewport breakpoint so picker filtering/loading
+  // always reflects the actual current view.
+  return getResponsiveLayout().key;
+}
+
+function getLayoutStorageState() {
+  try {
+    const raw = localStorage.getItem(LAYOUT_LIBRARY_KEY);
+    if (!raw) return { version: 1, layouts: [] };
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return { version: 1, layouts: parsed };
+    }
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.layouts)) {
+      return { version: parsed.version ?? 1, layouts: parsed.layouts };
+    }
+    if (parsed && typeof parsed === 'object') {
+      const ownerId = getCurrentUserId();
+      const legacyLayouts = Object.entries(parsed)
+        .filter(([, value]) => typeof value === 'string')
+        .map(([name, value]) => {
+          try {
+            return {
+              name,
+              breakpointKey: 'desktop',
+              scope: 'personal',
+              ownerId,
+              widgets: JSON.parse(value)
+            };
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
+
+      if (legacyLayouts.length > 0) {
+        return { version: 1, layouts: legacyLayouts };
+      }
+    }
+    return { version: 1, layouts: [] };
+  } catch {
+    return { version: 1, layouts: [] };
+  }
+}
+
+function persistNamedLayouts(state) {
+  localStorage.setItem(LAYOUT_LIBRARY_KEY, JSON.stringify(state));
+}
+
+function getEffectiveCustomLayoutAccess() {
+  return 'either';
+}
+
+function getEffectiveCustomLayoutScope() {
+  return layoutSharedEl?.checked ? 'shared' : 'personal';
+}
+
+function getLayoutRecordKey(record) {
+  if (record.scope === 'shared') {
+    return `${record.breakpointKey}::shared::${record.name}`;
+  }
+
+  return `${record.breakpointKey}::personal::${record.ownerId ?? getCurrentUserId()}::${record.name}`;
+}
+
+function canCurrentUserModifyRecord(record) {
+  return record.ownerId === getCurrentUserId();
+}
+
+function isVisibleLayoutForCurrentUser(record) {
+  const access = getEffectiveCustomLayoutAccess();
+  const currentUserId = getCurrentUserId();
+
+  if (access === 'personal') {
+    return record.scope === 'personal' && record.ownerId === currentUserId;
+  }
+
+  if (access === 'shared') {
+    return record.scope === 'shared';
+  }
+
+  return (record.scope === 'personal' && record.ownerId === currentUserId) || record.scope === 'shared';
+}
+
+function describeLayoutRecord(record) {
+  const ownerLabel = record.scope === 'shared' ? ` · ${record.ownerId ?? 'shared'}` : '';
+  return `${record.name} · ${record.breakpointKey} · ${record.scope}${ownerLabel}`;
+}
+
+function getVisibleLayoutRecords() {
+  const state = getLayoutStorageState();
+  const breakpointKey = getCurrentBreakpointKey();
+  return state.layouts
+    .filter((record) => record.breakpointKey === breakpointKey)
+    .filter((record) => isVisibleLayoutForCurrentUser(record))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.scope.localeCompare(b.scope));
+}
+
+function getComparableWidgets(widgets) {
+  return [...widgets]
+    .map((widget) => ({
+      id: widget.id,
+      type: widget.type,
+      x: widget.x,
+      y: widget.y,
+      w: widget.w,
+      h: widget.h,
+      locked: Boolean(widget.locked)
+    }))
+    .sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id));
+}
+
+function widgetsMatch(left, right) {
+  return JSON.stringify(getComparableWidgets(left)) === JSON.stringify(getComparableWidgets(right));
+}
+
+function recordMatchesCurrentState(record, widgets = dashboard.getWidgets()) {
+  return record.scope === getEffectiveCustomLayoutScope() && widgetsMatch(record.widgets, widgets);
+}
+
+function getActiveNamedLayoutRecord() {
+  if (!activeNamedLayoutKey) return null;
+  return getVisibleLayoutRecords().find((record) => getLayoutRecordKey(record) === activeNamedLayoutKey) ?? null;
+}
+
+function updateNamedLayoutState() {
+  const visibleLayouts = getVisibleLayoutRecords();
+  const currentWidgets = dashboard.getWidgets();
+  let selectedRecord = visibleLayouts.find((record) => getLayoutRecordKey(record) === activeNamedLayoutKey) ?? null;
+
+  if (layoutSharedEl) {
+    if (sharedScopeOverride !== null) {
+      layoutSharedEl.checked = sharedScopeOverride;
+    } else if (selectedRecord) {
+      layoutSharedEl.checked = selectedRecord.scope === 'shared';
+    }
+  }
+
+  const matchingRecord = visibleLayouts.find((record) => recordMatchesCurrentState(record, currentWidgets)) ?? null;
+  if (matchingRecord) {
+    selectedRecord = matchingRecord;
+    activeNamedLayoutKey = getLayoutRecordKey(matchingRecord);
+    sharedScopeOverride = null;
+    if (layoutSharedEl) {
+      layoutSharedEl.checked = matchingRecord.scope === 'shared';
+    }
+  }
+
+  if (layoutPickerEl) {
+    layoutPickerEl.value = activeNamedLayoutKey && visibleLayouts.some((record) => getLayoutRecordKey(record) === activeNamedLayoutKey)
+      ? activeNamedLayoutKey
+      : '';
+  }
+
+  if (saveCurrentLayoutBtn) {
+    saveCurrentLayoutBtn.disabled = !selectedRecord || !canCurrentUserModifyRecord(selectedRecord);
+  }
+
+  if (renameLayoutBtn) {
+    renameLayoutBtn.disabled = !selectedRecord || !canCurrentUserModifyRecord(selectedRecord);
+  }
+
+  if (deleteLayoutBtn) {
+    deleteLayoutBtn.disabled = !selectedRecord || !canCurrentUserModifyRecord(selectedRecord);
+  }
+
+  if (!layoutStatusEl) {
+    return;
+  }
+
+  layoutStatusEl.classList.remove('is-saved', 'is-dirty');
+
+  if (matchingRecord) {
+    layoutStatusEl.textContent = `Saved: ${matchingRecord.name}`;
+    layoutStatusEl.classList.add('is-saved');
+    return;
+  }
+
+  if (selectedRecord) {
+    layoutStatusEl.textContent = `Unsaved changes: ${selectedRecord.name}`;
+    layoutStatusEl.classList.add('is-dirty');
+    return;
+  }
+
+  layoutStatusEl.textContent = 'Not on a saved layout';
+}
+
+function reloadLayoutPicker() {
+  if (!layoutPickerEl) return;
+
+  const layouts = getVisibleLayoutRecords();
+
+  layoutPickerEl.innerHTML = '<option value="">Saved layouts</option>' + layouts
+    .map((record) => {
+      const key = getLayoutRecordKey(record);
+      const label = describeLayoutRecord(record);
+      return `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`;
+    })
+    .join('');
+
+  updateNamedLayoutState();
+}
+
+function saveCurrentNamedLayout(name) {
+  if (!name) return;
+
+  sharedScopeOverride = null;
+
+  const state = getLayoutStorageState();
+  const record = {
+    name,
+    breakpointKey: getCurrentBreakpointKey(),
+    scope: getEffectiveCustomLayoutScope(),
+    ownerId: getCurrentUserId(),
+    widgets: dashboard.getWidgets()
+  };
+
+  const existing = state.layouts.find((item) => getLayoutRecordKey(item) === getLayoutRecordKey(record));
+  if (existing && !canCurrentUserModifyRecord(existing)) {
+    notify('You cannot overwrite another user\'s layout');
+    return;
+  }
+
+  state.layouts = state.layouts.filter((item) => getLayoutRecordKey(item) !== getLayoutRecordKey(record));
+  state.layouts.push(record);
+  persistNamedLayouts(state);
+  activeNamedLayoutKey = getLayoutRecordKey(record);
+  reloadLayoutPicker();
+  layoutPickerEl.value = getLayoutRecordKey(record);
+  notify(`Saved layout “${name}” (${record.breakpointKey}, ${record.scope})`);
+}
+
+function saveSelectedNamedLayout() {
+  if (!editMode) {
+    notify('Enable edit mode to save a layout');
+    return;
+  }
+
+  const record = getActiveNamedLayoutRecord();
+  if (!record) {
+    notify('Choose a saved layout first or use Save as');
+    return;
+  }
+
+  if (!canCurrentUserModifyRecord(record)) {
+    notify('You can only save your own layouts');
+    return;
+  }
+
+  sharedScopeOverride = null;
+
+  const updatedRecord = {
+    ...record,
+    scope: getEffectiveCustomLayoutScope(),
+    widgets: dashboard.getWidgets()
+  };
+  const nextKey = getLayoutRecordKey(updatedRecord);
+  const state = getLayoutStorageState();
+  const conflict = state.layouts.find((item) => getLayoutRecordKey(item) === nextKey && getLayoutRecordKey(item) !== activeNamedLayoutKey);
+  if (conflict && !canCurrentUserModifyRecord(conflict)) {
+    notify('That layout name is already taken by another user');
+    return;
+  }
+
+  state.layouts = state.layouts.filter((item) => getLayoutRecordKey(item) !== activeNamedLayoutKey && getLayoutRecordKey(item) !== nextKey);
+  state.layouts.push(updatedRecord);
+  persistNamedLayouts(state);
+  activeNamedLayoutKey = nextKey;
+  reloadLayoutPicker();
+  notify(`Saved layout “${updatedRecord.name}”`);
+}
+
+function loadNamedLayout(recordKey) {
+  const state = getLayoutStorageState();
+  const saved = state.layouts.find((item) => getLayoutRecordKey(item) === recordKey);
+  if (!saved) {
+    notify('No such saved layout');
+    return;
+  }
+
+  if (saved.breakpointKey !== getCurrentBreakpointKey()) {
+    notify(`This layout is only available on ${saved.breakpointKey}`);
+    return;
+  }
+
+  try {
+    activeNamedLayoutKey = recordKey;
+    sharedScopeOverride = null;
+    dashboard.setLayout(saved.widgets);
+    if (layoutSharedEl) {
+      layoutSharedEl.checked = saved.scope === 'shared';
+    }
+    updateNamedLayoutState();
+    notify(`Loaded layout “${saved.name}” (${saved.breakpointKey}, ${saved.scope})`);
+  } catch {
+    notify('Could not load saved layout');
+  }
+}
+
+function renameSelectedLayout() {
+  if (!editMode) {
+    notify('Enable edit mode to rename a layout');
+    return;
+  }
+
+  const selected = layoutPickerEl?.value;
+  if (!selected) {
+    notify('Choose a saved layout first');
+    return;
+  }
+
+  const state = getLayoutStorageState();
+  const record = state.layouts.find((item) => getLayoutRecordKey(item) === selected);
+  if (!record) {
+    notify('No such saved layout');
+    return;
+  }
+
+  if (!canCurrentUserModifyRecord(record)) {
+    notify('You can only rename your own layouts');
+    return;
+  }
+
+  const nextName = window.prompt('Rename layout to:', record.name)?.trim();
+  if (!nextName || nextName === record.name) return;
+
+  const nextRecord = { ...record, name: nextName };
+  const nextKey = getLayoutRecordKey(nextRecord);
+  const conflict = state.layouts.find((item) => getLayoutRecordKey(item) === nextKey && item !== record);
+  if (conflict && !canCurrentUserModifyRecord(conflict)) {
+    notify('That layout name is already taken by another user');
+    return;
+  }
+
+  record.name = nextName;
+  persistNamedLayouts(state);
+  activeNamedLayoutKey = nextKey;
+  reloadLayoutPicker();
+  layoutPickerEl.value = nextKey;
+  notify(`Renamed layout to “${nextName}”`);
+}
+
+function deleteSelectedLayout() {
+  if (!editMode) {
+    notify('Enable edit mode to delete a layout');
+    return;
+  }
+
+  const selected = layoutPickerEl?.value;
+  if (!selected) {
+    notify('Choose a saved layout first');
+    return;
+  }
+
+  const state = getLayoutStorageState();
+  const record = state.layouts.find((item) => getLayoutRecordKey(item) === selected);
+  if (!record) {
+    notify('No such saved layout');
+    return;
+  }
+
+  if (!canCurrentUserModifyRecord(record)) {
+    notify('You can only delete your own layouts');
+    return;
+  }
+
+  const confirmed = window.confirm(`Delete layout “${record.name}”?`);
+  if (!confirmed) return;
+
+  state.layouts = state.layouts.filter((item) => getLayoutRecordKey(item) !== selected);
+  persistNamedLayouts(state);
+  activeNamedLayoutKey = '';
+  reloadLayoutPicker();
+  layoutPickerEl.value = '';
+  notify(`Deleted layout “${record.name}”`);
+}
+
+function syncCustomLayoutControls() {
+  reloadLayoutPicker();
+}
+
+function shouldRepackLockedWidgets(breakpointKey) {
+  return breakpointKey === 'tablet' || breakpointKey === 'mobile';
+}
+
+function applyResponsiveColumnCount(targetColumns) {
+  const { columns, rows } = dashboard.getDimensions();
+
+  if (columns === targetColumns) {
+    return;
+  }
+
+  try {
+    dashboard.setDimensions({ columns: targetColumns, rows });
+  } catch {
+    // If row bounds block a narrow layout, prefer adapting columns so the
+    // viewport still shifts to the expected responsive breakpoint.
+    dashboard.setDimensions({ columns: targetColumns, rows: undefined });
+  }
+}
+
+async function applySavedOrDerivedLayout(targetLayout, targetColumns) {
+  const key = getLayoutStorageKey(targetLayout.key);
+  const hasSaved = await dashboard.hasLayout(key);
+
+  if (hasSaved) {
+    await dashboard.restoreLayout(key);
+    return;
+  }
+
+  if (targetLayout.key === 'desktop') {
+    seedLayout();
+    return;
+  }
+
+  const sourceWidgets = dashboard.getWidgets();
+  if (sourceWidgets.length === 0) {
+    return;
+  }
+
+  const derived = deriveLayoutForBreakpoint(
+    sourceWidgets,
+    targetLayout.key,
+    dashboard.getWidgetTemplates(),
+    targetColumns,
+    { repackLocked: shouldRepackLockedWidgets(targetLayout.key) }
+  );
+
+  try {
+    dashboard.setLayout(derived);
+  } catch {
+    // Derived layout exceeds row bounds — auto-reflow from setDimensions above
+    // already produced a valid fallback, so nothing more to do.
+  }
+}
+
 async function applyResponsiveColumns() {
   const targetLayout = getResponsiveLayout();
   const targetColumns = targetLayout.columns;
-  const { columns, rows } = dashboard.getDimensions();
 
-  if (columns !== targetColumns) {
-    dashboard.setDimensions({ columns: targetColumns, rows });
-  }
+  applyResponsiveColumnCount(targetColumns);
 
   if (boardEl) {
     boardEl.style.gridTemplateColumns = `repeat(${targetColumns}, minmax(0, 1fr))`;
@@ -150,8 +702,12 @@ async function applyResponsiveColumns() {
 
   if (activeBreakpointKey !== targetLayout.key) {
     activeBreakpointKey = targetLayout.key;
-    await dashboard.restoreLayout(getLayoutStorageKey(targetLayout.key));
+    await applySavedOrDerivedLayout(targetLayout, targetColumns);
+    reloadLayoutPicker();
+    return;
   }
+
+  updateNamedLayoutState();
 }
 
 function scheduleResponsiveColumns() {
@@ -685,6 +1241,70 @@ function graphPolyline(points) {
   return coords;
 }
 
+function widgetMarkup(widget) {
+  if (widget.type === 'kpi') {
+    const metric = pickByWidget(widget, KPI_PRESETS) ?? {};
+    const label = metric.label ?? 'Metric';
+    const value = metric.value ?? '0';
+    const trendText = typeof metric.trend === 'string'
+      ? metric.trend
+      : `${Number(metric.delta ?? 0) >= 0 ? '+' : ''}${Number(metric.delta ?? 0).toFixed(1)}%`;
+    const period = metric.period ?? 'vs previous period';
+    const trendClass = String(trendText).startsWith('-') ? 'down' : 'up';
+    const seed = hashKey(`${widget.id}:${label}`);
+    return `<div class="widget-kpi">
+      <div class="kpi-label">${escapeHtml(label)}</div>
+      <div class="kpi-value">${escapeHtml(value)}</div>
+      <div class="kpi-foot">
+        <span class="kpi-trend ${trendClass}">${escapeHtml(trendText)}</span>
+        <span class="kpi-period">${escapeHtml(period)}</span>
+      </div>
+      <div class="kpi-spark">${kpiSparkBars(seed)}</div>
+    </div>`;
+  }
+
+  if (widget.type === 'graph') {
+    const series = pickByWidget(widget, GRAPH_PRESETS);
+    const deltaClass = series.delta.startsWith('-') ? 'down' : 'up';
+    return `<div class="widget-graph">
+      <div class="graph-head">
+        <span class="graph-title">${escapeHtml(series.title)}</span>
+        <span class="graph-delta ${deltaClass}">${escapeHtml(series.delta)}</span>
+      </div>
+      <svg class="graph-chart" viewBox="0 0 240 90" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+        <polyline class="graph-line" points="${graphPolyline(series.points)}"></polyline>
+      </svg>
+      <div class="graph-axis">${series.labels.map((label) => `<span>${escapeHtml(label)}</span>`).join('')}</div>
+    </div>`;
+  }
+
+  if (widget.type === 'list') {
+    const list = pickByWidget(widget, LIST_PRESETS);
+    const rows = list.items
+      .map((item) => {
+        const tone = sanitizeToken(item.tone, 'warn');
+        return `<li class="checklist-row">
+          <span class="checklist-label">${escapeHtml(item.label)}</span>
+          <span class="checklist-state ${tone}">${escapeHtml(item.status)}</span>
+        </li>`;
+      })
+      .join('');
+    return `<div class="widget-checklist">
+      <div class="checklist-head">
+        <span class="checklist-title">${escapeHtml(list.title)}</span>
+        <span class="checklist-count">${list.items.length} items</span>
+      </div>
+      <ul class="checklist-items">${rows}</ul>
+    </div>`;
+  }
+
+  if (widget.type === 'clock') {
+    return '<div class="widget-dice"><div class="dice-grid"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div></div>';
+  }
+
+  return `<div>${escapeHtml(widget.type)}</div>`;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -720,102 +1340,8 @@ function applyKeyboardMove(id, dx, dy) {
   try {
     dashboard.moveWidget(widget.id, widget.x + dx, widget.y + dy);
   } catch {
-    notify('Cannot move here');
+    notify('Unable to move widget');
   }
-}
-
-function applyKeyboardResize(id, axis, direction) {
-  const widget = getWidgetById(id);
-  if (!widget) return;
-  if (widget.locked) { notify('Widget is locked'); return; }
-
-  const validSizes = dashboard.getValidSizesForType(widget.type);
-  if (!validSizes.length) return;
-
-  let newW = widget.w;
-  let newH = widget.h;
-
-  if (axis === 'w') {
-    const widths = validSizes.filter((size) => size.h === widget.h).map((size) => size.w);
-    newW = nearestStep(widget.w, widths, direction);
-  } else {
-    const heights = validSizes.filter((size) => size.w === widget.w).map((size) => size.h);
-    newH = nearestStep(widget.h, heights, direction);
-  }
-
-  if (newW === widget.w && newH === widget.h) return;
-
-  try {
-    dashboard.updateWidget({ ...widget, w: newW, h: newH });
-  } catch {
-    notify('Cannot resize here');
-  }
-}
-
-function widgetMarkup(widget) {
-  if (widget.type === 'kpi') {
-    const kpi = pickByWidget(widget, KPI_PRESETS);
-    const trendClass = kpi.delta >= 0 ? 'up' : 'down';
-    const trendText = `${kpi.delta >= 0 ? '+' : ''}${kpi.delta.toFixed(1)}%`;
-    const spark = kpiSparkBars(hashKey(widget.id));
-    return `<div class="widget-kpi">
-      <div class="kpi-label">${escapeHtml(kpi.label)}</div>
-      <div class="kpi-value">${escapeHtml(kpi.value)}</div>
-      <div class="kpi-foot">
-        <span class="kpi-trend ${trendClass}">${trendText}</span>
-        <span class="kpi-period">vs last week</span>
-      </div>
-      <div class="kpi-spark">${spark}</div>
-    </div>`;
-  }
-
-  if (widget.type === 'graph') {
-    const graph = pickByWidget(widget, GRAPH_PRESETS);
-    const points = graphPolyline(graph.points);
-    const tone = graph.delta.startsWith('-') ? 'down' : 'up';
-    const xLabels = graph.labels.map((label) => `<span>${escapeHtml(label)}</span>`).join('');
-    return `<div class="widget-graph">
-      <div class="graph-head">
-        <span class="graph-title">${escapeHtml(graph.title)}</span>
-        <span class="graph-delta ${tone}">${escapeHtml(graph.delta)}</span>
-      </div>
-      <svg class="graph-chart" viewBox="0 0 240 90" preserveAspectRatio="none" aria-hidden="true">
-        <defs>
-          <linearGradient id="graphFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="rgba(79, 128, 255, 0.38)" />
-            <stop offset="100%" stop-color="rgba(79, 128, 255, 0.04)" />
-          </linearGradient>
-        </defs>
-        <polyline class="graph-line" points="${points}" />
-      </svg>
-      <div class="graph-axis">${xLabels}</div>
-    </div>`;
-  }
-
-  if (widget.type === 'list') {
-    const list = pickByWidget(widget, LIST_PRESETS);
-    const rows = list.items
-      .map(
-        (item) => `<li class="checklist-row">
-          <span class="checklist-label">${escapeHtml(item.label)}</span>
-          <span class="checklist-state ${sanitizeToken(item.tone, 'warn')}">${escapeHtml(item.status)}</span>
-        </li>`
-      )
-      .join('');
-    return `<div class="widget-checklist">
-      <div class="checklist-head">
-        <span class="checklist-title">${escapeHtml(list.title)}</span>
-        <span class="checklist-count">${list.items.length} items</span>
-      </div>
-      <ul class="checklist-items">${rows}</ul>
-    </div>`;
-  }
-
-  if (widget.type === 'clock') {
-    return '<div class="widget-dice"><div class="dice-grid"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div></div>';
-  }
-
-  return '<div>Widget</div>';
 }
 
 function renderBoard() {
@@ -846,45 +1372,90 @@ function renderBoard() {
     .join('');
 }
 
-function renderWidgetList() {
-  if (!widgetListEl) return;
+function openWizardStep1() {
+  if (!wizardStep1El || !wizardStep2El || !panelTitleEl) return;
 
-  const templates = dashboard.getWidgetTemplates();
+  panelTitleEl.textContent = 'Add widget — choose type';
+  wizardStep1El.classList.remove('hidden');
+  wizardStep2El.classList.add('hidden');
+  renderWizardStep1();
+}
 
-  widgetListEl.innerHTML = templates
+function openWizardStep2(type) {
+  if (!wizardStep1El || !wizardStep2El || !panelTitleEl || !wizardSizeHintEl) return;
+
+  panelTitleEl.textContent = `Add widget — choose size`;
+  wizardSizeHintEl.textContent = `Pick a size for ${type} on ${activeBreakpointKey ?? 'this breakpoint'}.`;
+  wizardStep1El.classList.add('hidden');
+  wizardStep2El.classList.remove('hidden');
+  renderWizardStep2(type);
+}
+
+function renderWizardStep1() {
+  if (!widgetTypeListEl) return;
+
+  const types = dashboard.getWidgetTypes();
+
+  widgetTypeListEl.innerHTML = types
     .map(
-      (template) =>
-        `<button class="widget-row" data-add="${escapeHtml(template.id)}"><span>${escapeHtml(template.label ?? template.id)}</span><span class="widget-size">${template.w}x${template.h}</span></button>`
+      (type) => `<button class="widget-row" data-type="${escapeHtml(type)}">
+        <span>${escapeHtml(type.charAt(0).toUpperCase() + type.slice(1))}</span>
+        <span class="widget-size">&#8250;</span>
+      </button>`
     )
     .join('');
 
-  for (const button of widgetListEl.querySelectorAll('[data-add]')) {
+  for (const button of widgetTypeListEl.querySelectorAll('[data-type]')) {
     button.addEventListener('click', () => {
-      if (!editMode) {
-        notify('Enable edit mode to add widgets');
-        return;
-      }
-      const templateId = button.getAttribute('data-add');
-      if (!templateId) return;
-      addWidget(templateId);
+      const type = button.getAttribute('data-type');
+      if (type) openWizardStep2(type);
+    });
+  }
+}
+
+function renderWizardStep2(type) {
+  if (!widgetSizeListEl) return;
+
+  const breakpointKey = activeBreakpointKey ?? getResponsiveLayout().key;
+  const sizes = dashboard.getValidSizesForTypeAtBreakpoint(type, breakpointKey);
+
+  widgetSizeListEl.innerHTML = sizes
+    .map(
+      (size) => `<button class="widget-row" data-type="${escapeHtml(type)}" data-w="${size.w}" data-h="${size.h}">
+        <span>${size.w} &times; ${size.h}</span>
+      </button>`
+    )
+    .join('');
+
+  for (const button of widgetSizeListEl.querySelectorAll('[data-w]')) {
+    button.addEventListener('click', () => {
+      const t = button.getAttribute('data-type');
+      const w = Number(button.getAttribute('data-w'));
+      const h = Number(button.getAttribute('data-h'));
+      if (!t) return;
+      addWidgetByTypeAndSize(t, w, h);
       panelEl?.classList.add('hidden');
     });
   }
 }
 
-function addWidget(templateId) {
+function addWidgetByTypeAndSize(type, w, h) {
   if (!editMode) return;
 
-  const template = getTemplateById(templateId);
+  // Find a template whose type matches; we only need any template as the size
+  // is supplied explicitly.
+  const templates = dashboard.getWidgetTemplates().filter((t) => t.type === type);
+  const template = templates.find((t) => t.w === w && t.h === h) ?? templates[0];
   if (!template) return;
 
-  const added = dashboard.addWidgetFromTemplate(templateId, {
-    x: 0,
-    y: 0
-  });
-
-  setSelected(added.id);
-  notify(`Added ${template.label ?? template.id}`);
+  const id = `${type}-${Date.now()}`;
+  try {
+    const added = dashboard.addWidget({ id, type, x: 0, y: 0, w, h });
+    setSelected(added.id);
+    notify(`Added ${type} ${w}\xd7${h}`);
+  } catch {
+    notify('No space left on the board');
+  }
 }
 
 function seedLayout() {
@@ -921,6 +1492,7 @@ function seedLayout() {
 dashboard.on('layoutChanged', () => {
   if (dragState || resizeState) return;
   renderBoard();
+  updateNamedLayoutState();
 });
 
 editModeBtn?.addEventListener('click', () => {
@@ -941,22 +1513,59 @@ openPanelBtn?.addEventListener('click', () => {
     return;
   }
   panelEl?.classList.remove('hidden');
+  openWizardStep1();
+});
+
+wizardBackBtn?.addEventListener('click', () => {
+  openWizardStep1();
 });
 
 closePanelBtn?.addEventListener('click', () => {
   panelEl?.classList.add('hidden');
 });
 
-saveBtn?.addEventListener('click', async () => {
-  const breakpoint = activeBreakpointKey ?? getResponsiveLayout().key;
-  await dashboard.saveLayout(getLayoutStorageKey(breakpoint));
-  notify(`Layout saved for ${breakpoint}`);
+saveLayoutBtn?.addEventListener('click', () => {
+  if (!editMode) {
+    notify('Enable edit mode to save a layout');
+    return;
+  }
+
+  const state = getLayoutStorageState();
+  const name = window.prompt('Save current dashboard as:', `layout-${state.layouts.length + 1}`);
+  if (!name) return;
+  saveCurrentNamedLayout(name.trim());
 });
 
-restoreBtn?.addEventListener('click', async () => {
-  const breakpoint = activeBreakpointKey ?? getResponsiveLayout().key;
-  await dashboard.restoreLayout(getLayoutStorageKey(breakpoint));
-  notify(`Layout restored for ${breakpoint}`);
+saveCurrentLayoutBtn?.addEventListener('click', () => {
+  saveSelectedNamedLayout();
+});
+
+layoutPickerEl?.addEventListener('change', () => {
+  if (!layoutPickerEl) return;
+  if (!layoutPickerEl.value) {
+    activeNamedLayoutKey = '';
+    updateNamedLayoutState();
+    return;
+  }
+  loadNamedLayout(layoutPickerEl.value);
+});
+
+layoutSharedEl?.addEventListener('change', () => {
+  sharedScopeOverride = layoutSharedEl.checked;
+  updateNamedLayoutState();
+});
+
+closeEditPanelBtn?.addEventListener('click', () => {
+  editMode = false;
+  updateEditModeUI();
+});
+
+renameLayoutBtn?.addEventListener('click', () => {
+  renameSelectedLayout();
+});
+
+deleteLayoutBtn?.addEventListener('click', () => {
+  deleteSelectedLayout();
 });
 
 resetBtn?.addEventListener('click', () => {
@@ -1130,7 +1739,7 @@ boardEl?.addEventListener('pointerdown', (event) => {
 
 window.addEventListener('resize', scheduleResponsiveColumns);
 
-renderWidgetList();
+syncCustomLayoutControls();
 seedLayout();
 void applyResponsiveColumns();
 updateWidthModeUI();

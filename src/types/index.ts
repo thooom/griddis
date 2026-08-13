@@ -29,6 +29,8 @@ export interface WidgetTemplate {
   maxH?: number;
   locked?: boolean;
   label?: string;
+  /** Allowed sizes for this template keyed by breakpoint key (e.g. "desktop", "tablet", "mobile"). When present for the active breakpoint, these take priority over the global w/h. */
+  breakpointSizes?: Record<string, Array<{ w: number; h: number }>>;
 }
 
 export interface AddWidgetFromTemplateOptions {

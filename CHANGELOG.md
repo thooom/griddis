@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.7] - 2026-08-13
+
+### Added
+- Added `deriveLayoutForBreakpoint` utility export for responsive layout derivation in consuming apps.
+- Added `breakpointSizes` support on `WidgetTemplate` for breakpoint-specific size presets.
+- Added dashboard layout-access APIs: `setCustomLayoutAccess`, `getCustomLayoutAccess`, and `hasLayout`.
+- Demo: added named layout management per breakpoint with personal/shared scopes and ownership checks.
+
+### Changed
+- Demo: replaced the flat edit toolbar with a right-side edit panel and reorganized controls for clearer workflow.
+- Demo: moved layout picker to the topbar and full-width toggle into the edit panel.
+
+### Fixed
+- Improved responsive demo behavior so breakpoint-specific layout selection and restoration follow the active viewport.
+
 ## [0.3.6] - 2026-08-06
 
 ### Added

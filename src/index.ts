@@ -18,5 +18,6 @@ export type {
     ResponsiveBreakpoint,
     WidgetTemplate
 } from './types';
+export { deriveLayoutForBreakpoint } from './utils/deriveLayout';
 export { resolveResponsiveBreakpoint } from './utils/responsive';
 

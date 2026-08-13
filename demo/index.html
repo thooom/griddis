@@ -14,12 +14,10 @@
           <p>Recreates the ANTP-like visual style while exercising real package APIs.</p>
         </div>
         <div class="toolbar">
-          <button id="full-width-toggle" class="btn primary">Full width: on</button>
-          <button id="edit-mode" class="btn primary">Edit mode: off</button>
-          <button id="open-panel" class="btn primary">+ Add widget</button>
-          <button id="save" class="btn">Save layout</button>
-          <button id="restore" class="btn">Restore layout</button>
-          <button id="reset" class="btn ghost">Reset board</button>
+          <select id="layout-picker" class="btn layout-picker" aria-label="Saved dashboard layouts">
+            <option value="">Saved layouts</option>
+          </select>
+          <button id="edit-mode" class="btn primary">Edit</button>
         </div>
       </header>
 
@@ -39,15 +37,55 @@
     <aside id="panel" class="panel hidden" aria-label="Add widget panel">
       <div class="panel-card">
         <div class="panel-header">
-          <h2>Add to your board</h2>
+          <h2 id="panel-title">Add to your board</h2>
           <button id="close-panel" class="close">x</button>
         </div>
-        <p>Shortcuts open sites; widgets are live tiles.</p>
-        <div class="shortcut-row">
-          <button id="new-shortcut" class="shortcut-btn">+ New shortcut</button>
+
+        <!-- Step 1: choose widget type -->
+        <div id="wizard-step-1">
+          <p>Choose a widget type to add.</p>
+          <div id="widget-type-list" class="widget-list"></div>
         </div>
-        <h3>Widgets</h3>
-        <div id="widget-list" class="widget-list"></div>
+
+        <!-- Step 2: choose size for selected type -->
+        <div id="wizard-step-2" class="hidden">
+          <button id="wizard-back" class="btn ghost wizard-back">&#8592; Back</button>
+          <p id="wizard-size-hint">Pick a size for this breakpoint.</p>
+          <div id="widget-size-list" class="widget-list"></div>
+        </div>
+      </div>
+    </aside>
+
+    <aside id="edit-panel" class="edit-panel" aria-label="Edit dashboard">
+      <div class="edit-panel-inner">
+        <div class="edit-panel-header">
+          <h2>Edit dashboard</h2>
+          <button id="close-edit-panel" class="btn ghost">Done</button>
+        </div>
+
+        <section class="edit-section">
+          <h3 class="edit-section-title">Widgets</h3>
+          <button id="full-width-toggle" class="btn">Full width: on</button>
+          <button id="open-panel" class="btn primary">+ Add widget</button>
+          <button id="reset" class="btn ghost">Reset board</button>
+        </section>
+
+        <section class="edit-section">
+          <h3 class="edit-section-title">Layouts</h3>
+          <span id="layout-status" class="layout-status">Not on a saved layout</span>
+          <label class="shared-toggle" for="layout-shared">
+            <input id="layout-shared" type="checkbox" />
+            <span>Shared layout</span>
+          </label>
+          <div class="edit-row">
+            <button id="save-current-layout" class="btn">Save</button>
+            <button id="save-layout" class="btn">Save as</button>
+          </div>
+          <div class="edit-row">
+            <button id="rename-layout" class="btn">Rename</button>
+            <button id="delete-layout" class="btn ghost">Delete</button>
+          </div>
+        </section>
       </div>
     </aside>
 

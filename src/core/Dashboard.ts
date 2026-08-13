@@ -22,6 +22,7 @@ export interface DashboardOptions {
   columns?: number;
   rows?: number;
   swapEnabled?: boolean;
+  customLayoutAccess?: 'personal' | 'shared' | 'either';
   widgetTemplates?: WidgetTemplate[];
   storage?: StorageAdapter;
   eventBus?: EventBus<DashboardEvents>;
@@ -37,6 +38,7 @@ export class Dashboard {
   private readonly dragManager: DragManager;
   private readonly resizeManager: ResizeManager;
   private swapEnabled: boolean;
+  private customLayoutAccess: 'personal' | 'shared' | 'either';
   private widgetTemplates = new Map<string, WidgetTemplate>();
   private templateCounter = 0;
 
@@ -50,6 +52,7 @@ export class Dashboard {
     this.storage = options.storage ?? new MemoryStorage();
     this.eventBus = options.eventBus ?? new EventBus<DashboardEvents>();
     this.swapEnabled = options.swapEnabled ?? true;
+    this.customLayoutAccess = options.customLayoutAccess ?? 'personal';
 
     if (options.widgetTemplates) {
       this.setWidgetTemplates(options.widgetTemplates);
@@ -71,7 +74,12 @@ export class Dashboard {
     for (const widget of widgets) {
       if (!widget.locked) {
         const normalized = this.gridEngine.normalize(widget);
-        const resolved = this.collisionEngine.resolve(normalized, relayout, this.gridEngine.getRows());
+        const resolved = this.collisionEngine.resolve(
+          normalized,
+          relayout,
+          this.gridEngine.getRows(),
+          { alignNewRowsLeft: true, compactLeft: true }
+        );
         relayout.push(resolved);
       }
     }
@@ -92,7 +100,12 @@ export class Dashboard {
     for (const widget of ordered) {
       if (!widget.locked) {
         const normalized = this.gridEngine.normalize(widget);
-        const resolved = this.collisionEngine.resolve(normalized, resolvedWidgets, this.gridEngine.getRows());
+        const resolved = this.collisionEngine.resolve(
+          normalized,
+          resolvedWidgets,
+          this.gridEngine.getRows(),
+          { alignNewRowsLeft: true, compactLeft: true }
+        );
         resolvedWidgets.push(resolved);
       }
     }
@@ -153,6 +166,14 @@ export class Dashboard {
     return this.swapEnabled;
   }
 
+  setCustomLayoutAccess(access: 'personal' | 'shared' | 'either'): void {
+    this.customLayoutAccess = access;
+  }
+
+  getCustomLayoutAccess(): 'personal' | 'shared' | 'either' {
+    return this.customLayoutAccess;
+  }
+
   applyResponsiveDimensions(width: number, breakpoints: ResponsiveBreakpoint[]): ResponsiveBreakpoint {
     const selected = resolveResponsiveBreakpoint(width, breakpoints);
     this.setDimensions({ columns: selected.columns, rows: selected.rows });
@@ -182,6 +203,44 @@ export class Dashboard {
     return Array.from(this.widgetTemplates.values())
       .filter((template) => template.type === type)
       .map(({ w, h }) => ({ w, h }));
+  }
+
+  getValidSizesForTypeAtBreakpoint(type: string, breakpointKey: string): { w: number; h: number }[] {
+    const templates = Array.from(this.widgetTemplates.values()).filter((t) => t.type === type);
+    const seen = new Set<string>();
+    const sizes: { w: number; h: number }[] = [];
+
+    for (const t of templates) {
+      const bpSizes = t.breakpointSizes?.[breakpointKey];
+      if (bpSizes) {
+        for (const s of bpSizes) {
+          const key = `${s.w}x${s.h}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            sizes.push(s);
+          }
+        }
+      }
+    }
+
+    // Fall back to global sizes when no breakpoint-specific entries exist
+    if (sizes.length === 0) {
+      return this.getValidSizesForType(type);
+    }
+
+    return sizes;
+  }
+
+  getWidgetTypes(): string[] {
+    const seen = new Set<string>();
+    const types: string[] = [];
+    for (const t of this.widgetTemplates.values()) {
+      if (!seen.has(t.type)) {
+        seen.add(t.type);
+        types.push(t.type);
+      }
+    }
+    return types;
   }
 
   addWidgetFromTemplate(templateId: string, options: AddWidgetFromTemplateOptions = {}): DashboardWidget {
@@ -215,7 +274,13 @@ export class Dashboard {
 
     const pluginApplied = this.plugins.apply(widget);
     const normalized = this.gridEngine.normalize(pluginApplied);
-    const resolved = this.collisionEngine.resolve(normalized, this.layout.getAll(), this.gridEngine.getRows());
+    const autoCompact = !normalized.locked;
+    const resolved = this.collisionEngine.resolve(
+      normalized,
+      this.layout.getAll(),
+      this.gridEngine.getRows(),
+      { alignNewRowsLeft: autoCompact, compactLeft: autoCompact }
+    );
     this.layout.add(resolved);
 
     this.eventBus.emit('widgetAdded', resolved);
@@ -332,6 +397,11 @@ export class Dashboard {
 
   async saveLayout(key: string): Promise<void> {
     await this.storage.save(key, this.layout.toJSON());
+  }
+
+  async hasLayout(key: string): Promise<boolean> {
+    const saved = await this.storage.load(key);
+    return saved !== null;
   }
 
   async saveScopedLayout(scope: LayoutScope): Promise<string> {
