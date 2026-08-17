@@ -1,4 +1,5 @@
 export { Dashboard } from './core/Dashboard';
+export type { DashboardOptions } from './core/Dashboard';
 export { Layout } from './core/Layout';
 export { EventBus } from './events/EventBus';
 export { CollisionEngine } from './grid/CollisionEngine';
