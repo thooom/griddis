@@ -1,3 +1,34 @@
+export type Compaction = 'vertical' | 'none';
+
+export interface GridRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface ResizeRect extends GridRect {
+  id: string;
+  minW?: number;
+  minH?: number;
+  maxW?: number;
+  maxH?: number;
+}
+
+export interface ResizeCollisionOptions<T extends ResizeRect = ResizeRect> {
+  columns: number;
+  rows?: number;
+  immovable?: ReadonlySet<string> | ((widget: Readonly<T>) => boolean);
+}
+
+export type ResizeResult<T extends ResizeRect = DashboardWidget> =
+  | { success: true; widget: T; widgets: T[] }
+  | {
+      success: false;
+      blockerId: string;
+      reason: 'bounds' | 'minimum-size' | 'immovable' | 'iteration-limit' | 'invalid-layout';
+    };
+
 export interface DashboardWidget {
   id: string;
   type: string;

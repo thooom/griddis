@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.4.0] - 2026-10-21
+
+### Added
+- Added dashboard `compaction: 'vertical' | 'none'`, `setCompaction`, and `getCompaction`. The default preserves existing layout behavior; `none` retains explicit positions without locking widgets.
+- Added the pure `resolveResize` export with deterministic push-then-shrink cascades, explicit immovable IDs or predicate, grid bounds, minimum sizes, and bounded rejection with a blocker ID.
+- Added full-rect overloads to `ResizeManager.resize` and `Dashboard.resizeWidget` for all eight resize directions. The dashboard overload applies collision resolution atomically and returns a discriminated result.
+- Exported `Compaction`, `GridRect`, `ResizeRect`, `ResizeCollisionOptions`, and `ResizeResult` types.
+
+### Compatibility
+- Existing numeric resize calls retain their return type, normalization, and moving-widget collision behavior. The new full-rect dashboard overload opts into neighbor displacement and shrinking.
+- Locked-widget editing restrictions and default locked-anchor placement remain unchanged.
+
 ## [0.3.7] - 2026-08-13
 
 ### Added

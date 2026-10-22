@@ -3,14 +3,19 @@ import { CollisionEngine } from '../grid/CollisionEngine';
 import { DragManager } from '../grid/DragManager';
 import { GridEngine } from '../grid/GridEngine';
 import { ResizeManager } from '../grid/ResizeManager';
+import { resolveResize } from '../grid/ResizeCollisionResolver';
 import { PluginManager } from '../plugins/PluginManager';
 import { MemoryStorage } from '../storage/MemoryStorage';
 import { StorageAdapter } from '../storage/StorageAdapter';
 import {
     AddWidgetFromTemplateOptions,
+    Compaction,
     DashboardDimensions,
     DashboardEvents,
     DashboardWidget,
+    GridRect,
+    ResizeCollisionOptions,
+    ResizeResult,
     LayoutScope,
     ResponsiveBreakpoint,
     WidgetTemplate
@@ -22,6 +27,7 @@ export interface DashboardOptions {
   columns?: number;
   rows?: number;
   swapEnabled?: boolean;
+  compaction?: Compaction;
   customLayoutAccess?: 'personal' | 'shared' | 'either';
   widgetTemplates?: WidgetTemplate[];
   storage?: StorageAdapter;
@@ -38,6 +44,7 @@ export class Dashboard {
   private readonly dragManager: DragManager;
   private readonly resizeManager: ResizeManager;
   private swapEnabled: boolean;
+  private compaction: Compaction;
   private customLayoutAccess: 'personal' | 'shared' | 'either';
   private widgetTemplates = new Map<string, WidgetTemplate>();
   private templateCounter = 0;
@@ -52,6 +59,7 @@ export class Dashboard {
     this.storage = options.storage ?? new MemoryStorage();
     this.eventBus = options.eventBus ?? new EventBus<DashboardEvents>();
     this.swapEnabled = options.swapEnabled ?? true;
+    this.compaction = options.compaction ?? 'vertical';
     this.customLayoutAccess = options.customLayoutAccess ?? 'personal';
 
     if (options.widgetTemplates) {
@@ -60,6 +68,11 @@ export class Dashboard {
   }
 
   private relayoutWidgets(): void {
+    if (this.compaction === 'none') {
+      this.layout.setAll(this.layout.getAll().map((widget) => this.gridEngine.normalize(widget)));
+      return;
+    }
+
     const widgets = this.layout
       .getAll()
       .sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id));
@@ -88,6 +101,10 @@ export class Dashboard {
   }
 
   private normalizeAndResolveWidgets(widgets: DashboardWidget[]): DashboardWidget[] {
+    if (this.compaction === 'none') {
+      return widgets.map((widget) => this.gridEngine.normalize(widget));
+    }
+
     const ordered = [...widgets].sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id));
     const resolvedWidgets: DashboardWidget[] = [];
 
@@ -164,6 +181,14 @@ export class Dashboard {
 
   isSwapEnabled(): boolean {
     return this.swapEnabled;
+  }
+
+  setCompaction(compaction: Compaction): void {
+    this.compaction = compaction;
+  }
+
+  getCompaction(): Compaction {
+    return this.compaction;
   }
 
   setCustomLayoutAccess(access: 'personal' | 'shared' | 'either'): void {
@@ -274,7 +299,7 @@ export class Dashboard {
 
     const pluginApplied = this.plugins.apply(widget);
     const normalized = this.gridEngine.normalize(pluginApplied);
-    const autoCompact = !normalized.locked;
+    const autoCompact = this.compaction === 'vertical' && !normalized.locked;
     const resolved = this.collisionEngine.resolve(
       normalized,
       this.layout.getAll(),
@@ -342,13 +367,40 @@ export class Dashboard {
     return this.updateWidget(moved);
   }
 
-  resizeWidget(id: string, w: number, h: number): DashboardWidget {
+  resizeWidget(id: string, rect: GridRect, options?: Pick<ResizeCollisionOptions<DashboardWidget>, 'immovable'>): ResizeResult;
+  resizeWidget(id: string, w: number, h: number): DashboardWidget;
+  resizeWidget(
+    id: string,
+    rectOrWidth: GridRect | number,
+    heightOrOptions?: number | Pick<ResizeCollisionOptions<DashboardWidget>, 'immovable'>
+  ): DashboardWidget | ResizeResult {
     const widget = this.layout.get(id);
     if (!widget) throw new Error(`Widget with id "${id}" does not exist`);
     if (widget.locked) throw new Error(`Widget with id "${id}" is locked and cannot be resized`);
 
-    const resized = this.resizeManager.resize(widget, w, h);
-    return this.updateWidget(resized);
+    if (typeof rectOrWidth === 'number') {
+      const resized = this.resizeManager.resize(widget, rectOrWidth, heightOrOptions as number);
+      return this.updateWidget(resized);
+    }
+
+    const options = typeof heightOrOptions === 'object' ? heightOrOptions : {};
+    const previous = this.layout.getAll();
+    const result = resolveResize(widget, rectOrWidth, previous, {
+      ...this.getDimensions(),
+      immovable: options.immovable
+    });
+    if (!result.success) return result;
+
+    this.layout.setAll(result.widgets);
+    for (const updated of result.widgets) {
+      const original = previous.find((item) => item.id === updated.id)!;
+      if (updated.id === id || updated.x !== original.x || updated.y !== original.y ||
+        updated.w !== original.w || updated.h !== original.h) {
+        this.eventBus.emit('widgetUpdated', updated);
+      }
+    }
+    this.eventBus.emit('layoutChanged', this.layout.getAll());
+    return result;
   }
 
   removeWidget(id: string): DashboardWidget | undefined {

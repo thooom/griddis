@@ -1,4 +1,4 @@
-import { Dashboard, deriveLayoutForBreakpoint } from 'griddis';
+import { Dashboard, deriveLayoutForBreakpoint, resolveResize } from 'griddis';
 
 const sceneEl = document.querySelector('.scene');
 const boardEl = document.querySelector('#board');
@@ -27,6 +27,13 @@ const renameLayoutBtn = document.querySelector('#rename-layout');
 const deleteLayoutBtn = document.querySelector('#delete-layout');
 const editPanelEl = document.querySelector('#edit-panel');
 const closeEditPanelBtn = document.querySelector('#close-edit-panel');
+const addCollapsibleAreaBtn = document.querySelector('#add-collapsible-area');
+const confirmCollapsibleAreaBtn = document.querySelector('#confirm-collapsible-area');
+const cancelCollapsibleAreaBtn = document.querySelector('#cancel-collapsible-area');
+const collapsibleAreaListEl = document.querySelector('#collapsible-area-list');
+const collapsibleAreaNameEl = document.querySelector('#collapsible-area-name');
+const collapseEdgeOptionsEl = document.querySelector('#collapse-edge-options');
+const collapseEdgeButtons = [...document.querySelectorAll('[data-collapse-edge]')];
 
 const LAYOUT_LIBRARY_KEY = 'griddis-demo-layout-library-v1';
 const CURRENT_USER_KEY = 'griddis-demo-current-user-v1';
@@ -35,10 +42,6 @@ const CUSTOM_LAYOUT_ACCESS_DEFAULT = 'personal';
 
 function getCurrentUserId() {
   return localStorage.getItem(CURRENT_USER_KEY) ?? CURRENT_USER_DEFAULT;
-}
-
-function setCurrentUserId(userId) {
-  localStorage.setItem(CURRENT_USER_KEY, userId);
 }
 
 const projectWidgetTemplates = [
@@ -147,7 +150,9 @@ let activeBreakpointKey = null;
 let responsiveApplyTimer = null;
 let dragMoveFrame = null;
 let pendingDragPointer = null;
-let hoverIndicatorState = { swapTargetIds: [], incompatibleTargetIds: [] };
+let collapsibleAreas = [];
+let collapsibleAreaDraft = null;
+let collapsibleAreaResizeState = null;
 let activeNamedLayoutKey = '';
 let sharedScopeOverride = null;
 
@@ -170,6 +175,7 @@ function updateEditModeUI() {
 
   if (!editMode) {
     panelEl?.classList.add('hidden');
+    cancelCollapsibleArea();
     if (dragState) {
       cleanupDragArtifacts();
       dragState = null;
@@ -225,10 +231,6 @@ function setSelected(id, options = {}) {
 
 function getWidgetById(id) {
   return dashboard.getWidgets().find((widget) => widget.id === id) ?? null;
-}
-
-function getTemplateById(id) {
-  return dashboard.getWidgetTemplates().find((template) => template.id === id) ?? null;
 }
 
 function getResponsiveViewportWidth() {
@@ -366,12 +368,31 @@ function getComparableWidgets(widgets) {
     .sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id));
 }
 
-function widgetsMatch(left, right) {
-  return JSON.stringify(getComparableWidgets(left)) === JSON.stringify(getComparableWidgets(right));
+function getComparableCollapsibleAreas(areas = []) {
+  return areas
+    .map((area) => ({
+      edge: area.edge,
+      depth: area.depth,
+      name: area.name,
+      collapsed: Boolean(area.collapsed)
+    }))
+    .sort((a, b) => a.edge.localeCompare(b.edge) || a.depth - b.depth || a.name.localeCompare(b.name));
 }
 
-function recordMatchesCurrentState(record, widgets = dashboard.getWidgets()) {
-  return record.scope === getEffectiveCustomLayoutScope() && widgetsMatch(record.widgets, widgets);
+function getCurrentLayoutSnapshot() {
+  return {
+    widgets: dashboard.getWidgets(),
+    collapsibleAreas
+  };
+}
+
+function layoutsMatch(left, right) {
+  return JSON.stringify(getComparableWidgets(left.widgets ?? left)) === JSON.stringify(getComparableWidgets(right.widgets ?? right))
+    && JSON.stringify(getComparableCollapsibleAreas(left.collapsibleAreas)) === JSON.stringify(getComparableCollapsibleAreas(right.collapsibleAreas));
+}
+
+function recordMatchesCurrentState(record) {
+  return record.scope === getEffectiveCustomLayoutScope() && layoutsMatch(record, getCurrentLayoutSnapshot());
 }
 
 function getActiveNamedLayoutRecord() {
@@ -381,7 +402,6 @@ function getActiveNamedLayoutRecord() {
 
 function updateNamedLayoutState() {
   const visibleLayouts = getVisibleLayoutRecords();
-  const currentWidgets = dashboard.getWidgets();
   let selectedRecord = visibleLayouts.find((record) => getLayoutRecordKey(record) === activeNamedLayoutKey) ?? null;
 
   if (layoutSharedEl) {
@@ -392,7 +412,7 @@ function updateNamedLayoutState() {
     }
   }
 
-  const matchingRecord = visibleLayouts.find((record) => recordMatchesCurrentState(record, currentWidgets)) ?? null;
+  const matchingRecord = visibleLayouts.find((record) => recordMatchesCurrentState(record)) ?? null;
   if (matchingRecord) {
     selectedRecord = matchingRecord;
     activeNamedLayoutKey = getLayoutRecordKey(matchingRecord);
@@ -468,7 +488,7 @@ function saveCurrentNamedLayout(name) {
     breakpointKey: getCurrentBreakpointKey(),
     scope: getEffectiveCustomLayoutScope(),
     ownerId: getCurrentUserId(),
-    widgets: dashboard.getWidgets()
+    ...getCurrentLayoutSnapshot()
   };
 
   const existing = state.layouts.find((item) => getLayoutRecordKey(item) === getLayoutRecordKey(record));
@@ -508,7 +528,7 @@ function saveSelectedNamedLayout() {
   const updatedRecord = {
     ...record,
     scope: getEffectiveCustomLayoutScope(),
-    widgets: dashboard.getWidgets()
+    ...getCurrentLayoutSnapshot()
   };
   const nextKey = getLayoutRecordKey(updatedRecord);
   const state = getLayoutStorageState();
@@ -543,6 +563,12 @@ function loadNamedLayout(recordKey) {
     activeNamedLayoutKey = recordKey;
     sharedScopeOverride = null;
     dashboard.setLayout(saved.widgets);
+    collapsibleAreas = Array.isArray(saved.collapsibleAreas)
+      ? saved.collapsibleAreas.map((area) => ({ ...area, name: area.name || 'Collapsable area' }))
+      : [];
+    renderCollapsibleAreaList();
+    updateCollapsibleAreaEditor();
+    renderBoard();
     if (layoutSharedEl) {
       layoutSharedEl.checked = saved.scope === 'shared';
     }
@@ -727,23 +753,6 @@ function nearestValid(value, sorted) {
   );
 }
 
-function nearestStep(current, sorted, direction) {
-  if (!sorted.length) return current;
-  const unique = [...new Set(sorted)].sort((a, b) => a - b);
-
-  if (direction > 0) {
-    return unique.find((value) => value > current) ?? current;
-  }
-
-  if (direction < 0) {
-    for (let i = unique.length - 1; i >= 0; i -= 1) {
-      if (unique[i] < current) return unique[i];
-    }
-  }
-
-  return current;
-}
-
 function startResize(cardEl, event, direction) {
   if (!editMode) return;
 
@@ -777,10 +786,10 @@ function startResize(cardEl, event, direction) {
   resizeState = {
     id,
     widget,
+    widgets: dashboard.getWidgets().map((item) => ({ ...item })),
     direction,
     sourceEl: cardEl,
     previewEl,
-    otherWidgets: dashboard.getWidgets().filter((item) => item.id !== id),
     pointerId: event.pointerId,
     currentW: widget.w,
     currentH: widget.h,
@@ -791,8 +800,7 @@ function startResize(cardEl, event, direction) {
     boardLeft,
     boardTop,
     originalRight: widget.x + widget.w,
-    originalBottom: widget.y + widget.h,
-    isBlocked: false
+    originalBottom: widget.y + widget.h
   };
 
   cardEl.setPointerCapture(event.pointerId);
@@ -845,11 +853,26 @@ function updateResizePreview(clientX, clientY) {
   resizeState.currentX = newX;
   resizeState.currentY = newY;
 
-  const candidate = { id: widget.id, x: newX, y: newY, w: newW, h: newH };
-  const others = resizeState.otherWidgets ?? dashboard.getWidgets().filter((item) => item.id !== widget.id);
-  const blocked = others.some((item) => collides(candidate, item));
+  const rect = { x: newX, y: newY, w: newW, h: newH };
+  const result = resolveResize(widget, rect, resizeState.widgets, {
+    ...dashboard.getDimensions()
+  });
+  const resolved = result.success ? new Map(result.widgets.map((item) => [item.id, item])) : null;
+  for (const original of resizeState.widgets) {
+    if (original.id === widget.id) continue;
+    const card = queryWidgetCardById(original.id);
+    if (!card) continue;
 
-  resizeState.isBlocked = blocked;
+    const preview = resolved?.get(original.id) ?? original;
+    card.style.gridColumn = `${preview.x + 1} / span ${preview.w}`;
+    card.style.gridRow = `${preview.y + 1} / span ${preview.h}`;
+    card.classList.toggle('resize-yield-preview', Boolean(resolved) && (
+      preview.x !== original.x || preview.y !== original.y ||
+      preview.w !== original.w || preview.h !== original.h
+    ));
+  }
+
+  const blocked = !result.success;
   resizeState.sourceEl.classList.toggle('resize-blocked', blocked);
   resizeState.previewEl.classList.toggle('resize-blocked', blocked);
 
@@ -870,19 +893,18 @@ function endResize() {
   resizeState.sourceEl.classList.remove('dragging', 'resize-blocked');
   document.body.classList.remove('is-resizing');
 
-  const { id, widget, currentW, currentH, currentX, currentY, isBlocked } = resizeState;
+  const { id, widget, currentW, currentH, currentX, currentY } = resizeState;
   resizeState = null;
 
   const changed = currentW !== widget.w || currentH !== widget.h || currentX !== widget.x || currentY !== widget.y;
   if (changed) {
-    if (isBlocked) {
-      notify('Cannot resize here');
-      renderBoard();
-      return;
-    }
-
     try {
-      dashboard.updateWidget({ ...widget, x: currentX, y: currentY, w: currentW, h: currentH });
+      const result = dashboard.resizeWidget(id, { x: currentX, y: currentY, w: currentW, h: currentH });
+      if (!result.success) {
+        notify('Cannot resize here');
+        renderBoard();
+        return;
+      }
       setSelected(id);
     } catch {
       notify('Cannot resize here');
@@ -1314,6 +1336,12 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function formatCollapsibleAreaName(name, edge, collapsed) {
+  const safeName = escapeHtml(name);
+  if (!collapsed || edge === 'top') return safeName;
+  return [...String(name)].map((character) => `<span>${escapeHtml(character)}</span>`).join('');
+}
+
 function sanitizeToken(value, fallback = 'default') {
   const token = String(value).trim().toLowerCase();
   return /^[a-z0-9_-]+$/.test(token) ? token : fallback;
@@ -1332,6 +1360,182 @@ function isInteractiveTarget(value) {
   return Boolean(value.closest('input, textarea, select, button, [contenteditable="true"]'));
 }
 
+function getBoardRowCount() {
+  const dimensions = dashboard.getDimensions();
+  if (dimensions.rows) return dimensions.rows;
+  return Math.max(1, ...dashboard.getWidgets().map((widget) => widget.y + widget.h));
+}
+
+function getValidCollapsibleDepths(edge) {
+  const { columns } = dashboard.getDimensions();
+  const limit = edge === 'top' ? getBoardRowCount() : columns;
+  const depths = [];
+  const widgets = dashboard.getWidgets();
+
+  for (let depth = 1; depth < limit; depth += 1) {
+    const boundary = edge === 'right' ? columns - depth : depth;
+    const crossesBoundary = widgets.some((widget) => {
+      const start = edge === 'top' ? widget.y : widget.x;
+      const end = start + (edge === 'top' ? widget.h : widget.w);
+      return start < boundary && end > boundary;
+    });
+
+    if (!crossesBoundary) depths.push(depth);
+  }
+
+  return depths;
+}
+
+function isWidgetInsideCollapsibleArea(widget, area) {
+  if (area.edge === 'left') return widget.x + widget.w <= area.depth;
+  if (area.edge === 'right') return widget.x >= dashboard.getDimensions().columns - area.depth;
+  return widget.y + widget.h <= area.depth;
+}
+
+function getCollapsedWidget(widget, area) {
+  if (!area || !area.collapsed) return widget;
+  if (area.edge === 'left') return { ...widget, x: widget.x - area.depth };
+  if (area.edge === 'top') return { ...widget, y: widget.y - area.depth };
+  return widget;
+}
+
+function getAreaGridStyle(area, columns, rows) {
+  if (area.collapsed) return '';
+
+  if (area.edge === 'left') return `grid-column:1 / span ${area.depth}; grid-row:1 / span ${rows};`;
+  if (area.edge === 'right') return `grid-column:${columns - area.depth + 1} / span ${area.depth}; grid-row:1 / span ${rows};`;
+  return `grid-column:1 / span ${columns}; grid-row:1 / span ${area.depth};`;
+}
+
+function getCollapsibleAreaStyle(area, metrics, columns) {
+  const boardWidth = metrics.boardRect.width;
+  const boardHeight = metrics.boardRect.height;
+  const edgeInset = 14;
+  const collapsedBarSize = 24;
+  if (area.collapsed) {
+    if (area.edge === 'left') return `left:${edgeInset}px; top:${edgeInset}px; width:${collapsedBarSize}px; height:${Math.max(collapsedBarSize, boardHeight - edgeInset * 2)}px;`;
+    if (area.edge === 'right') return `right:${edgeInset}px; top:${edgeInset}px; width:${collapsedBarSize}px; height:${Math.max(collapsedBarSize, boardHeight - edgeInset * 2)}px;`;
+    return `left:${edgeInset}px; top:${edgeInset}px; width:${Math.max(collapsedBarSize, boardWidth - edgeInset * 2)}px; height:${collapsedBarSize}px;`;
+  }
+
+  const boundary = area.edge === 'right' ? columns - area.depth : area.depth;
+  const boundaryOffset = area.edge === 'top'
+    ? boundary * metrics.rowHeight + (boundary - 0.5) * metrics.gap
+    : boundary * metrics.columnWidth + (boundary - 0.5) * metrics.gap;
+
+  if (area.edge === 'top') return `left:0; top:${boundaryOffset - 6}px; width:${boardWidth}px; height:12px;`;
+  if (area.edge === 'left') return `left:${boundaryOffset - 6}px; top:0; width:12px; height:${boardHeight}px;`;
+  return `left:${boundaryOffset - 6}px; top:0; width:12px; height:${boardHeight}px;`;
+}
+
+function renderCollapsibleAreaList() {
+  if (!collapsibleAreaListEl) return;
+
+  collapsibleAreaListEl.innerHTML = collapsibleAreas.length === 0
+    ? '<span>No collapsable areas yet.</span>'
+    : collapsibleAreas.map((area) => `<div class="collapsible-area-row">
+        <span>${escapeHtml(area.name)} · ${area.edge} · ${area.depth} ${area.edge === 'top' ? 'row(s)' : 'column(s)'}</span>
+        <button class="btn ghost" data-remove-area="${escapeHtml(area.id)}">Remove</button>
+      </div>`).join('');
+
+  for (const button of collapsibleAreaListEl.querySelectorAll('[data-remove-area]')) {
+    button.addEventListener('click', () => {
+      const id = button.getAttribute('data-remove-area');
+      collapsibleAreas = collapsibleAreas.filter((area) => area.id !== id);
+      renderBoard();
+      renderCollapsibleAreaList();
+      updateNamedLayoutState();
+    });
+  }
+}
+
+function updateCollapsibleAreaEditor() {
+  const draft = collapsibleAreaDraft;
+  if (collapseEdgeOptionsEl) collapseEdgeOptionsEl.hidden = !draft;
+  for (const button of collapseEdgeButtons) {
+    button.classList.toggle('is-selected', button.getAttribute('data-collapse-edge') === draft?.edge);
+  }
+
+  if (addCollapsibleAreaBtn) addCollapsibleAreaBtn.disabled = Boolean(draft) || collapsibleAreas.length > 0;
+  if (confirmCollapsibleAreaBtn) confirmCollapsibleAreaBtn.disabled = !draft;
+  if (cancelCollapsibleAreaBtn) cancelCollapsibleAreaBtn.hidden = !draft;
+}
+
+function startCollapsibleAreaPlacement(edge) {
+  if (!editMode || collapsibleAreas.length > 0) return;
+
+  const depths = getValidCollapsibleDepths(edge);
+  if (depths.length === 0) {
+    notify('No edge boundary is clear of widget lines');
+    return;
+  }
+
+  collapsibleAreaDraft = { edge, depth: depths[0], name: collapsibleAreaNameEl?.value.trim() ?? '' };
+  updateCollapsibleAreaEditor();
+  renderBoard();
+  notify('Drag the ghost edge, then confirm placement');
+}
+
+function startCollapsibleAreaResize(event) {
+  if (!collapsibleAreaDraft) return;
+  event.preventDefault();
+  event.stopPropagation();
+  collapsibleAreaResizeState = { pointerId: event.pointerId };
+  document.body.classList.add('is-resizing');
+  boardEl?.setPointerCapture?.(event.pointerId);
+}
+
+function updateCollapsibleAreaPreview(clientX, clientY) {
+  if (!collapsibleAreaDraft || !collapsibleAreaResizeState) return;
+
+  const metrics = getBoardMetrics();
+  const { columns } = dashboard.getDimensions();
+  const maxDepth = collapsibleAreaDraft.edge === 'top' ? getBoardRowCount() - 1 : columns - 1;
+  const step = collapsibleAreaDraft.edge === 'top'
+    ? metrics.rowHeight + metrics.gap
+    : metrics.columnWidth + metrics.gap;
+  let rawDepth;
+
+  if (collapsibleAreaDraft.edge === 'left') rawDepth = Math.round((clientX - metrics.boardRect.left) / step);
+  else if (collapsibleAreaDraft.edge === 'right') rawDepth = Math.round((metrics.boardRect.right - clientX) / step);
+  else rawDepth = Math.round((clientY - metrics.boardRect.top) / step);
+
+  const validDepths = getValidCollapsibleDepths(collapsibleAreaDraft.edge);
+  const boundedDepth = clamp(rawDepth, 1, Math.max(1, maxDepth));
+  collapsibleAreaDraft.depth = nearestValid(boundedDepth, validDepths) ?? collapsibleAreaDraft.depth;
+  renderBoard();
+}
+
+function endCollapsibleAreaResize() {
+  if (!collapsibleAreaResizeState) return;
+  collapsibleAreaResizeState = null;
+  document.body.classList.remove('is-resizing');
+}
+
+function confirmCollapsibleArea() {
+  if (!collapsibleAreaDraft) return;
+  const { edge, depth } = collapsibleAreaDraft;
+  if (!getValidCollapsibleDepths(edge).includes(depth)) {
+    notify('The area boundary must follow widget lines');
+    return;
+  }
+
+  const name = collapsibleAreaNameEl?.value.trim() || 'Collapsable area';
+  collapsibleAreas = [{ id: `collapse-${Date.now()}`, edge, depth, name, collapsed: false }];
+  collapsibleAreaDraft = null;
+  updateCollapsibleAreaEditor();
+  renderCollapsibleAreaList();
+  renderBoard();
+  notify('Collapsable area placed');
+}
+
+function cancelCollapsibleArea() {
+  collapsibleAreaDraft = null;
+  endCollapsibleAreaResize();
+  updateCollapsibleAreaEditor();
+  renderBoard();
+}
+
 function applyKeyboardMove(id, dx, dy) {
   const widget = getWidgetById(id);
   if (!widget) return;
@@ -1348,10 +1552,25 @@ function renderBoard() {
   if (!boardEl) return;
 
   const { columns } = dashboard.getDimensions();
-  boardEl.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+  const rows = getBoardRowCount();
+  const area = collapsibleAreas[0] ?? null;
+  const collapsedArea = area?.collapsed ? area : null;
+  const renderedColumns = collapsedArea?.edge === 'left' || collapsedArea?.edge === 'right'
+    ? columns - collapsedArea.depth
+    : columns;
+  const renderedRows = collapsedArea?.edge === 'top' ? rows - collapsedArea.depth : rows;
+  boardEl.style.gridTemplateColumns = `repeat(${Math.max(1, renderedColumns)}, minmax(0, 1fr))`;
+  boardEl.style.gridTemplateRows = collapsedArea?.edge === 'top'
+    ? `repeat(${Math.max(1, renderedRows)}, 74px)`
+    : '';
+  boardEl.classList.toggle('has-collapsed-area', Boolean(collapsedArea));
+  boardEl.classList.toggle('has-collapsed-side-left', collapsedArea?.edge === 'left');
+  boardEl.classList.toggle('has-collapsed-side-right', collapsedArea?.edge === 'right');
 
-  const widgets = dashboard.getWidgets();
-  boardEl.innerHTML = widgets
+  const widgets = dashboard.getWidgets()
+    .filter((widget) => !collapsedArea || !isWidgetInsideCollapsibleArea(widget, collapsedArea))
+    .map((widget) => getCollapsedWidget(widget, collapsedArea));
+  const widgetMarkupHtml = widgets
     .map((widget) => {
       const selectedClass = widget.id === selectedId ? ' selected' : '';
       const lockedClass = widget.locked ? ' locked' : '';
@@ -1370,6 +1589,21 @@ function renderBoard() {
       </article>`;
     })
     .join('');
+
+  const draft = collapsibleAreaDraft;
+  const ghostMarkup = draft
+    ? `<div class="collapsible-ghost edge-${draft.edge}" style="${getAreaGridStyle(draft, columns, rows)}" aria-label="Collapsable area placement preview">
+        <span class="collapsible-area-label">Place ${draft.edge} area · ${draft.depth}</span>
+        <button class="collapsible-area-handle" data-collapse-resize aria-label="Resize collapsable area"></button>
+      </div>`
+    : '';
+  const areaMarkup = area
+    ? `<button class="collapsible-area edge-${area.edge}${area.collapsed ? ' is-collapsed' : ''}" data-area-id="${escapeHtml(area.id)}" style="${getCollapsibleAreaStyle(area, getBoardMetrics(), columns)}" type="button" aria-label="${area.collapsed ? 'Expand' : 'Collapse'} ${escapeHtml(area.name)}">
+        <span class="collapsible-area-name">${area.collapsed ? formatCollapsibleAreaName(area.name, area.edge, area.collapsed) : ''}</span>
+      </button>`
+    : '';
+
+  boardEl.innerHTML = widgetMarkupHtml + areaMarkup + ghostMarkup;
 }
 
 function openWizardStep1() {
@@ -1501,6 +1735,25 @@ editModeBtn?.addEventListener('click', () => {
   notify(editMode ? 'Edit mode enabled' : 'Read-only mode enabled');
 });
 
+for (const button of collapseEdgeButtons) {
+  button.addEventListener('click', () => {
+    if (!collapsibleAreaDraft) return;
+    startCollapsibleAreaPlacement(button.getAttribute('data-collapse-edge'));
+  });
+}
+
+addCollapsibleAreaBtn?.addEventListener('click', () => {
+  const selectedEdge = collapseEdgeButtons.find((button) => button.classList.contains('is-selected'))
+    ?.getAttribute('data-collapse-edge');
+  const firstValidEdge = ['left', 'right', 'top'].find((edge) => getValidCollapsibleDepths(edge).length > 0);
+  startCollapsibleAreaPlacement(selectedEdge && getValidCollapsibleDepths(selectedEdge).length > 0
+    ? selectedEdge
+    : firstValidEdge);
+});
+
+confirmCollapsibleAreaBtn?.addEventListener('click', confirmCollapsibleArea);
+cancelCollapsibleAreaBtn?.addEventListener('click', cancelCollapsibleArea);
+
 fullWidthToggleBtn?.addEventListener('click', () => {
   fullWidthMode = !fullWidthMode;
   updateWidthModeUI();
@@ -1573,6 +1826,9 @@ resetBtn?.addEventListener('click', () => {
     notify('Enable edit mode to reset the board');
     return;
   }
+  collapsibleAreas = [];
+  cancelCollapsibleArea();
+  renderCollapsibleAreaList();
   seedLayout();
   notify('Board reset');
 });
@@ -1635,7 +1891,10 @@ document.addEventListener('keydown', (event) => {
 });
 
 document.addEventListener('pointermove', (event) => {
-  if (dragState && event.pointerId === dragState.pointerId) {
+  if (collapsibleAreaResizeState && event.pointerId === collapsibleAreaResizeState.pointerId) {
+    event.preventDefault();
+    updateCollapsibleAreaPreview(event.clientX, event.clientY);
+  } else if (dragState && event.pointerId === dragState.pointerId) {
     event.preventDefault();
     pendingDragPointer = { x: event.clientX, y: event.clientY };
     if (dragMoveFrame === null) {
@@ -1653,7 +1912,9 @@ document.addEventListener('pointermove', (event) => {
 }, true);
 
 document.addEventListener('pointerup', (event) => {
-  if (dragState && event.pointerId === dragState.pointerId) {
+  if (collapsibleAreaResizeState && event.pointerId === collapsibleAreaResizeState.pointerId) {
+    endCollapsibleAreaResize();
+  } else if (dragState && event.pointerId === dragState.pointerId) {
     endDrag();
   } else if (resizeState && event.pointerId === resizeState.pointerId) {
     endResize();
@@ -1661,7 +1922,9 @@ document.addEventListener('pointerup', (event) => {
 }, true);
 
 document.addEventListener('pointercancel', (event) => {
-  if (dragState && event.pointerId === dragState.pointerId) {
+  if (collapsibleAreaResizeState && event.pointerId === collapsibleAreaResizeState.pointerId) {
+    endCollapsibleAreaResize();
+  } else if (dragState && event.pointerId === dragState.pointerId) {
     cleanupDragArtifacts();
     dragState = null;
     applyDragHoverIndicators();
@@ -1686,6 +1949,19 @@ boardEl?.addEventListener('click', (event) => {
     dashboard.removeWidget(id);
     if (selectedId === id) setSelected(null);
     notify(`Removed ${id}`);
+    return;
+  }
+
+  const area = target.closest('[data-area-id]');
+  if (area) {
+    const id = area.getAttribute('data-area-id');
+    const selectedArea = collapsibleAreas.find((item) => item.id === id);
+    if (selectedArea) {
+      selectedArea.collapsed = !selectedArea.collapsed;
+      renderBoard();
+      updateNamedLayoutState();
+      notify(selectedArea.collapsed ? 'Area collapsed' : 'Area expanded');
+    }
     return;
   }
 
@@ -1718,6 +1994,11 @@ boardEl?.addEventListener('pointerdown', (event) => {
     return;
   }
 
+  if (target.closest('[data-collapse-resize]')) {
+    startCollapsibleAreaResize(event);
+    return;
+  }
+
   const resizeHandle = target.closest('.resize-handle');
   if (resizeHandle) {
     const id = resizeHandle.getAttribute('data-resize');
@@ -1741,6 +2022,8 @@ window.addEventListener('resize', scheduleResponsiveColumns);
 
 syncCustomLayoutControls();
 seedLayout();
+renderCollapsibleAreaList();
+updateCollapsibleAreaEditor();
 void applyResponsiveColumns();
 updateWidthModeUI();
 updateEditModeUI();

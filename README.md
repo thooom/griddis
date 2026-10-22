@@ -81,6 +81,7 @@ This section lists the public functions on Dashboard and what each one is for.
 - options.columns: Grid column count (default 12).
 - options.rows: Optional max row count.
 - options.swapEnabled: Enables same-size swap on drag collisions (default true).
+- options.compaction: `'vertical'` (default, existing packing behavior) or `'none'` (preserve explicit layout positions).
 - options.widgetTemplates: Initial template catalog.
 - options.storage: Optional custom storage adapter.
 - options.eventBus: Optional custom event bus.
@@ -103,6 +104,7 @@ This section lists the public functions on Dashboard and what each one is for.
 - updateWidget(widget): Updates one widget and resolves collisions.
 - moveWidget(id, x, y): Moves a widget to a target position.
 - resizeWidget(id, w, h): Resizes a widget to a target size.
+- resizeWidget(id, rect, options?): Resizes using `{ x, y, w, h }`, yielding neighbors with a success/rejection result.
 - removeWidget(id): Removes a widget.
 - getWidgets(): Returns all widgets.
 - setLayout(widgets): Replaces current layout with a full layout snapshot.
@@ -121,6 +123,23 @@ This section lists the public functions on Dashboard and what each one is for.
 
 - setSwapEnabled(enabled): Enables or disables same-size swap behavior at runtime.
 - isSwapEnabled(): Reads current swap setting.
+
+### Compaction APIs
+
+- setCompaction(mode): Selects `'vertical'` or `'none'` for subsequent layout operations.
+- getCompaction(): Reads the current compaction mode.
+
+Use `compaction: 'none'` to preserve explicit `x`/`y` positions in `setLayout`,
+restoration, and dimension updates without setting `locked: true`. Positions and
+sizes are still normalized to grid bounds, but no automatic reflow is performed.
+Adds still resolve collisions, without left-packing. Layout snapshots are not
+collision-repaired in this mode; pass a non-overlapping snapshot and use the
+full-rect resize API for collision-safe interactive resizing.
+
+`locked` prevents user edits (move, resize, update, and remove); it is not needed
+to disable compaction. Default vertical mode retains legacy locked-anchor
+placement for compatibility. Changing the compaction setting does not immediately
+rearrange the current layout.
 
 ### Events API
 
@@ -181,13 +200,71 @@ const swapEnabled = dashboard.isSwapEnabled();
 
 ![Resize](https://raw.githubusercontent.com/thooom/griddis/main/assets/resize.gif)
 
-Use resizeWidget for programmatic size updates:
+Existing numeric calls remain supported with the same return value and behavior:
 
 ```ts
 dashboard.resizeWidget('sales-graph', 3, 2);
 ```
 
-If the new size collides or violates bounds, collision handling/normalization applies through update logic.
+This form normalizes size/bounds and moves the resized widget down on collision,
+as in earlier releases. `ResizeManager.resize(widget, w, h)` also remains supported;
+its new `resize(widget, rect)` overload normalizes all four coordinates.
+
+For collision-safe interactive resizing, opt into the full-rect dashboard overload:
+
+```ts
+const dashboard = new Dashboard({ columns: 12, rows: 10, compaction: 'none' });
+dashboard.setLayout([
+  { id: 'sales', type: 'chart', x: 2, y: 2, w: 2, h: 2 },
+  { id: 'forecast', type: 'chart', x: 4, y: 2, w: 2, h: 2, minW: 1 }
+]);
+
+const result = dashboard.resizeWidget(
+  'sales',
+  { x: 1, y: 1, w: 4, h: 3 },
+  { immovable: new Set(['company-header']) }
+);
+
+if (result.success) {
+  console.log(result.widget, result.widgets);
+} else {
+  console.log(result.blockerId, result.reason);
+}
+```
+
+Changing `x`/`y` along with `w`/`h` expresses north, west, and corner handles, as
+well as south/east. The requested rect stays fixed: neighbors are displaced along
+the expanded edge, then shrunk on that axis only if displacement fails. Cascades
+can backtrack to shrink an upstream neighbor. Horizontal edges are tried before
+vertical edges for corner resizes. Neighbors never shrink below `minW`/`minH`
+(default 1). Columns and optional rows bound the result; omitted rows are unbounded.
+
+The full-rect dashboard overload rejects invalid or out-of-bounds requests rather
+than silently normalizing them. Ordinary no-room rejection returns
+`{ success: false, blockerId, reason }`, with no state changes or events. Success
+atomically commits a non-overlapping layout, emits `widgetUpdated` for the resized
+and changed neighbors, and emits one `layoutChanged`. Unknown IDs and attempts to
+resize locked source widgets still throw, just like existing calls.
+
+Use an `immovable` ID set or predicate to identify app-pinned walls. The dashboard
+also treats locked widgets as walls. For framework-independent previews, the pure
+resolver does **not** infer immovability from `locked`:
+
+```ts
+import { resolveResize } from 'griddis';
+
+const widgets = dashboard.getWidgets();
+const preview = resolveResize(widgets[0], { x: 1, y: 1, w: 5, h: 3 }, widgets, {
+  columns: 12,
+  rows: 10,
+  immovable: (widget) => widget.id === 'company-header'
+});
+```
+
+The resolver accepts rects with IDs and optional size limits, preserves extra
+fields, and never mutates inputs. Rejection reasons are `bounds`, `minimum-size`,
+`immovable`, `invalid-layout`, or `iteration-limit`. Cascades have a finite work
+budget and a depth limit of 128; pathological cases reject instead of hanging.
 
 ### Lock Resizing to Predetermined Sizes
 
