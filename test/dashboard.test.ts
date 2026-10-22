@@ -1,7 +1,234 @@
 import { describe, expect, it } from 'vitest';
 import { Dashboard } from '../src/core/Dashboard';
+import { resolveResize } from '../src/grid/ResizeCollisionResolver';
+import { GridEngine } from '../src/grid/GridEngine';
+import { ResizeManager } from '../src/grid/ResizeManager';
+
+describe('resolveResize', () => {
+  const widget = (id: string, x: number, y: number, w = 2, h = 2) => ({ id, x, y, w, h });
+
+  it('pushes a neighbour without moving the requested rect or mutating inputs', () => {
+    const widgets = [widget('a', 0, 0), widget('b', 2, 0)];
+    const original = structuredClone(widgets);
+    const result = resolveResize(widgets[0], { x: 0, y: 0, w: 3, h: 2 }, widgets, { columns: 8 });
+    expect(result).toMatchObject({ success: true, widgets: [{ id: 'a', w: 3 }, { id: 'b', x: 3, w: 2 }] });
+    expect(widgets).toEqual(original);
+    expect(resolveResize(widgets[0], { x: 0, y: 0, w: 3, h: 2 }, widgets, { columns: 8 })).toEqual(result);
+  });
+
+  it('shrinks at the grid edge only after displacement fails', () => {
+    const widgets = [widget('a', 0, 0), widget('b', 2, 0, 3)];
+    expect(resolveResize(widgets[0], { x: 0, y: 0, w: 4, h: 2 }, widgets, { columns: 6 }))
+      .toMatchObject({ success: true, widgets: [{ id: 'a', w: 4 }, { id: 'b', x: 4, w: 2 }] });
+  });
+
+  it('cascades across four widgets', () => {
+    const widgets = ['a', 'b', 'c', 'd'].map((id, index) => widget(id, index * 2, 0));
+    expect(resolveResize(widgets[0], { x: 0, y: 0, w: 3, h: 2 }, widgets, { columns: 10 }))
+      .toMatchObject({ success: true, widgets: [{ x: 0 }, { x: 3 }, { x: 5 }, { x: 7 }] });
+  });
+
+  it.each([
+    ['n', { x: 4, y: 3, w: 2, h: 3 }, { x: 4, y: 2 }, { x: 4, y: 1 }],
+    ['ne', { x: 4, y: 3, w: 3, h: 3 }, { x: 6, y: 2 }, { x: 7, y: 2 }],
+    ['e', { x: 4, y: 4, w: 3, h: 2 }, { x: 6, y: 4 }, { x: 7, y: 4 }],
+    ['se', { x: 4, y: 4, w: 3, h: 3 }, { x: 6, y: 6 }, { x: 7, y: 6 }],
+    ['s', { x: 4, y: 4, w: 2, h: 3 }, { x: 4, y: 6 }, { x: 4, y: 7 }],
+    ['sw', { x: 3, y: 4, w: 3, h: 3 }, { x: 2, y: 6 }, { x: 1, y: 6 }],
+    ['w', { x: 3, y: 4, w: 3, h: 2 }, { x: 2, y: 4 }, { x: 1, y: 4 }],
+    ['nw', { x: 3, y: 3, w: 3, h: 3 }, { x: 2, y: 2 }, { x: 1, y: 2 }]
+  ] as const)('pushes neighbours along the %s expanded edge', (_direction, rect, neighbour, expected) => {
+    const widgets = [widget('a', 4, 4), widget('b', neighbour.x, neighbour.y)];
+    expect(resolveResize(widgets[0], rect, widgets, { columns: 12, rows: 12 }))
+      .toMatchObject({ success: true, widget: rect, widgets: [{ id: 'a' }, { id: 'b', ...expected, w: 2, h: 2 }] });
+  });
+
+  it.each(['west', 'north'])('shrinks against the %s grid edge', (direction) => {
+    const horizontal = direction === 'west';
+    const widgets = [widget('a', horizontal ? 2 : 0, horizontal ? 0 : 2), widget('b', 0, 0)];
+    const rect = { x: horizontal ? 1 : 0, y: horizontal ? 0 : 1, w: horizontal ? 3 : 2, h: horizontal ? 2 : 3 };
+    expect(resolveResize(widgets[0], rect, widgets, { columns: 4, rows: 4 }))
+      .toMatchObject({ success: true, widgets: [{ id: 'a', ...rect }, { id: 'b', x: 0, y: 0, w: horizontal ? 1 : 2, h: horizontal ? 2 : 1 }] });
+  });
+
+  it('backtracks to shrink an upstream neighbour when a downstream minimum blocks the push', () => {
+    const widgets = [widget('a', 0, 0), widget('b', 2, 0), { ...widget('c', 4, 0), minW: 2 }];
+    expect(resolveResize(widgets[0], { x: 0, y: 0, w: 3, h: 2 }, widgets, { columns: 6 }))
+      .toMatchObject({ success: true, widgets: [{ w: 3 }, { x: 3, w: 1 }, { x: 4, w: 2 }] });
+  });
+
+  it('rejects excessively deep cascades cleanly rather than recursing without a bound', () => {
+    const widgets = Array.from({ length: 140 }, (_, index) => widget(String(index), index, 0, 1, 1));
+    const result = resolveResize(widgets[0], { x: 0, y: 0, w: 2, h: 1 }, widgets, { columns: 141 });
+    expect(result).toMatchObject({ success: false, reason: 'iteration-limit' });
+    expect(widgets[1].x).toBe(1);
+  });
+
+  it('treats explicit immovable widgets as walls, independently of locked', () => {
+    const widgets = [widget('a', 0, 0), { ...widget('b', 2, 0), locked: true }];
+    const rect = { x: 0, y: 0, w: 3, h: 2 };
+    expect(resolveResize(widgets[0], rect, widgets, { columns: 8 }).success).toBe(true);
+    expect(resolveResize(widgets[0], rect, widgets, { columns: 8, immovable: new Set(['b']) }))
+      .toEqual({ success: false, blockerId: 'b', reason: 'immovable' });
+    expect(resolveResize(widgets[0], rect, widgets, { columns: 8, immovable: (item) => item.id === 'b' }))
+      .toEqual({ success: false, blockerId: 'b', reason: 'immovable' });
+  });
+
+  it('shrinks before a pinned wall without moving the wall', () => {
+    const widgets = [widget('a', 0, 0), widget('b', 2, 0, 3), widget('wall', 5, 0)];
+    expect(resolveResize(widgets[0], { x: 0, y: 0, w: 3, h: 2 }, widgets, { columns: 10, immovable: new Set(['wall']) }))
+      .toMatchObject({ success: true, widgets: [{ w: 3 }, { x: 3, w: 2 }, { id: 'wall', x: 5, w: 2 }] });
+  });
+
+  it.each(['horizontal', 'vertical'])('names the blocker when its %s minimum prevents shrinking', (axis) => {
+    const horizontal = axis === 'horizontal';
+    const widgets = [widget('a', 0, 0), { ...widget('b', horizontal ? 2 : 0, horizontal ? 0 : 2), minW: 2, minH: 2 }];
+    expect(resolveResize(widgets[0], { x: 0, y: 0, w: horizontal ? 3 : 2, h: horizontal ? 2 : 3 }, widgets, { columns: 4, rows: 4 }))
+      .toEqual({ success: false, blockerId: 'b', reason: 'minimum-size' });
+  });
+
+  it('shrinks vertically at configured row bounds and pushes with unbounded rows', () => {
+    const widgets = [widget('a', 0, 0), widget('b', 0, 2)];
+    const rect = { x: 0, y: 0, w: 2, h: 3 };
+    expect(resolveResize(widgets[0], rect, widgets, { columns: 2, rows: 4 }))
+      .toMatchObject({ success: true, widgets: [{ h: 3 }, { y: 3, h: 1 }] });
+    expect(resolveResize(widgets[0], rect, widgets, { columns: 2 }))
+      .toMatchObject({ success: true, widgets: [{ h: 3 }, { y: 3, h: 2 }] });
+  });
+
+  it.each([
+    { x: -1, y: 0, w: 2, h: 2 }, { x: 0, y: -1, w: 2, h: 2 },
+    { x: 3, y: 0, w: 2, h: 2 }, { x: 0, y: 3, w: 2, h: 2 },
+    { x: NaN, y: 0, w: 2, h: 2 }
+  ])('rejects out-of-bounds requested rects: %j', (rect) => {
+    const widgets = [widget('a', 0, 0)];
+    expect(resolveResize(widgets[0], rect, widgets, { columns: 4, rows: 4 }))
+      .toEqual({ success: false, blockerId: 'a', reason: 'bounds' });
+  });
+});
 
 describe('Dashboard', () => {
+  it.each([
+    ['n', { x: 2, y: 1, w: 2, h: 3 }],
+    ['ne', { x: 2, y: 1, w: 3, h: 3 }],
+    ['e', { x: 2, y: 2, w: 3, h: 2 }],
+    ['se', { x: 2, y: 2, w: 3, h: 3 }],
+    ['s', { x: 2, y: 2, w: 2, h: 3 }],
+    ['sw', { x: 1, y: 2, w: 3, h: 3 }],
+    ['w', { x: 1, y: 2, w: 3, h: 2 }],
+    ['nw', { x: 1, y: 1, w: 3, h: 3 }]
+  ] as const)('supports the %s full-rect resize direction', (_direction, rect) => {
+    const dashboard = new Dashboard({ columns: 8, rows: 8, compaction: 'none' });
+    const widget = { id: 'a', type: 'chart', x: 2, y: 2, w: 2, h: 2 };
+    dashboard.setLayout([widget]);
+    expect(dashboard.resizeWidget('a', rect)).toMatchObject({ success: true, widget: rect });
+    expect(dashboard.getWidgets()[0]).toMatchObject(rect);
+    expect(new ResizeManager(new GridEngine(8, 8)).resize(widget, rect)).toMatchObject(rect);
+  });
+
+  it('atomically commits full-rect resize cascades and emits updates for changed widgets', () => {
+    const dashboard = new Dashboard({ columns: 10, compaction: 'none' });
+    dashboard.setLayout(['a', 'b', 'c'].map((id, index) => ({ id, type: 'chart', x: index * 2, y: 0, w: 2, h: 2 })));
+    const updates: string[] = [];
+    let changes = 0;
+    dashboard.on('widgetUpdated', (widget) => updates.push(widget.id));
+    dashboard.on('layoutChanged', () => { changes += 1; });
+    expect(dashboard.resizeWidget('a', { x: 0, y: 0, w: 3, h: 2 })).toMatchObject({ success: true });
+    expect(dashboard.getWidgets()).toMatchObject([{ x: 0, w: 3 }, { x: 3 }, { x: 5 }]);
+    expect(updates).toEqual(['a', 'b', 'c']);
+    expect(changes).toBe(1);
+  });
+
+  it('commits a smaller neighbor when a full-rect resize runs out of grid space', () => {
+    const dashboard = new Dashboard({ columns: 6, rows: 2, compaction: 'none' });
+    dashboard.setLayout([
+      { id: 'a', type: 'chart', x: 0, y: 0, w: 2, h: 2 },
+      { id: 'b', type: 'chart', x: 2, y: 0, w: 3, h: 2, locked: true },
+      { id: 'c', type: 'chart', x: 5, y: 0, w: 1, h: 2 }
+    ]);
+
+    const result = dashboard.resizeWidget('a', { x: 0, y: 0, w: 3, h: 2 });
+
+    expect(result).toMatchObject({
+      success: true,
+      widgets: [{ id: 'a', w: 3 }, { id: 'b', x: 3, w: 2 }, { id: 'c', x: 5, w: 1 }]
+    });
+    expect(dashboard.getWidgets()).toMatchObject([
+      { id: 'a', w: 3 }, { id: 'b', x: 3, w: 2 }, { id: 'c', x: 5, w: 1 }
+    ]);
+  });
+
+  it('rejects full-rect resizing atomically and reports the blocker without events', () => {
+    const dashboard = new Dashboard({ columns: 6, rows: 2, compaction: 'none' });
+    const widgets = ['a', 'b', 'c'].map((id, index) => ({ id, type: 'chart', x: index * 2, y: 0, w: 2, h: 2, minW: 2 }));
+    dashboard.setLayout(widgets);
+    let changes = 0;
+    dashboard.on('layoutChanged', () => { changes += 1; });
+    dashboard.on('widgetUpdated', () => { changes += 1; });
+    expect(dashboard.resizeWidget('a', { x: 0, y: 0, w: 3, h: 2 })).toMatchObject({ success: false, blockerId: 'b' });
+    expect(dashboard.getWidgets()).toEqual(widgets);
+    expect(changes).toBe(0);
+  });
+
+  it('uses explicit immovable options rather than locked state for resize walls', () => {
+    const dashboard = new Dashboard({ columns: 8, compaction: 'none' });
+    const widgets = [
+      { id: 'a', type: 'chart', x: 0, y: 0, w: 2, h: 2 },
+      { id: 'b', type: 'chart', x: 2, y: 0, w: 2, h: 2 }
+    ];
+    dashboard.setLayout(widgets);
+    const rect = { x: 0, y: 0, w: 3, h: 2 };
+    expect(dashboard.resizeWidget('a', rect, { immovable: new Set(['b']) }))
+      .toMatchObject({ success: false, blockerId: 'b' });
+    dashboard.setLayout([widgets[0], { ...widgets[1], locked: true }]);
+    expect(dashboard.resizeWidget('a', rect)).toMatchObject({
+      success: true,
+      widgets: [{ id: 'a', w: 3 }, { id: 'b', x: 3, w: 2 }]
+    });
+    dashboard.setLayout([widgets[0], { ...widgets[1], locked: true }]);
+    expect(dashboard.resizeWidget('a', rect, { immovable: new Set(['b']) }))
+      .toMatchObject({ success: false, blockerId: 'b' });
+  });
+
+  it('preserves the numeric resize API and its moving-widget collision behavior', () => {
+    const dashboard = new Dashboard({ columns: 6, compaction: 'none' });
+    const widgets = [
+      { id: 'a', type: 'chart', x: 0, y: 0, w: 2, h: 2 },
+      { id: 'b', type: 'chart', x: 2, y: 0, w: 2, h: 2 }
+    ];
+    dashboard.setLayout(widgets);
+    expect(dashboard.resizeWidget('a', 3, 2)).toMatchObject({ id: 'a', x: 0, y: 2, w: 3, h: 2 });
+    expect(dashboard.getWidgets()[1]).toEqual(widgets[1]);
+    expect(new ResizeManager(new GridEngine(6)).resize(widgets[0], 3, 2)).toMatchObject({ x: 0, y: 0, w: 3, h: 2 });
+  });
+
+  it('preserves explicit unlocked positions with compaction disabled', () => {
+    const dashboard = new Dashboard({ columns: 8, compaction: 'none' });
+    const widgets = [
+      { id: 'a', type: 'chart', x: 3, y: 2, w: 2, h: 1 },
+      { id: 'b', type: 'chart', x: 6, y: 4, w: 2, h: 1 }
+    ];
+    dashboard.setLayout(widgets);
+    expect(dashboard.getWidgets()).toEqual(widgets);
+    expect(dashboard.getCompaction()).toBe('none');
+    dashboard.setDimensions({ columns: 8 });
+    expect(dashboard.getWidgets()).toEqual(widgets);
+    expect(dashboard.addWidget({ id: 'c', type: 'chart', x: 4, y: 6, w: 1, h: 1 }).x).toBe(4);
+    dashboard.setCompaction('vertical');
+    expect(dashboard.getCompaction()).toBe('vertical');
+  });
+
+  it('preserves default vertical packing and collision resolution', () => {
+    for (const dashboard of [new Dashboard({ columns: 4 }), new Dashboard({ columns: 4, compaction: 'vertical' })]) {
+      dashboard.setLayout([
+        { id: 'a', type: 'chart', x: 2, y: 0, w: 3, h: 1 },
+        { id: 'b', type: 'chart', x: 2, y: 0, w: 3, h: 1 }
+      ]);
+      expect(dashboard.getCompaction()).toBe('vertical');
+      expect(dashboard.getWidgets()).toMatchObject([{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 0, y: 1 }]);
+    }
+  });
+
   it('adds widgets and resolves collisions by moving down', () => {
     const dashboard = new Dashboard({ columns: 4 });
 

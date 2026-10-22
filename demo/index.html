@@ -70,6 +70,24 @@
           <button id="reset" class="btn ghost">Reset board</button>
         </section>
 
+        <section class="edit-section collapsible-section">
+          <h3 class="edit-section-title">Collapsable area</h3>
+          <p class="edit-help">Create a full-height side rail or a full-width top section. Its boundary must follow widget edges.</p>
+          <label class="collapse-name-field" for="collapsible-area-name">
+            <span>Name</span>
+            <input id="collapsible-area-name" type="text" maxlength="40" placeholder="e.g. Filters" />
+          </label>
+          <div id="collapse-edge-options" class="collapse-edge-options" role="group" aria-label="Collapsable area edge" hidden>
+            <button class="btn collapse-edge-btn" data-collapse-edge="left">Left</button>
+            <button class="btn collapse-edge-btn" data-collapse-edge="right">Right</button>
+            <button class="btn collapse-edge-btn" data-collapse-edge="top">Top</button>
+          </div>
+          <button id="add-collapsible-area" class="btn primary">+ Add collapsable area</button>
+          <button id="confirm-collapsible-area" class="btn" disabled>Confirm placement</button>
+          <button id="cancel-collapsible-area" class="btn ghost" hidden>Cancel placement</button>
+          <div id="collapsible-area-list" class="collapsible-area-list"></div>
+        </section>
+
         <section class="edit-section">
           <h3 class="edit-section-title">Layouts</h3>
           <span id="layout-status" class="layout-status">Not on a saved layout</span>
